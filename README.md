@@ -1,16 +1,34 @@
 # rs-utcp
 
-Rust client for the Universal Tool Calling Protocol (UTCP). It lets you discover and call tools across HTTP, CLI, WebSocket, gRPC, GraphQL, TCP/UDP, SSE, MCP, WebRTC, HTTP stream, and text providers with a single API.
+Rust client for the Universal Tool Calling Protocol (UTCP). Discover and call tools across HTTP, CLI, WebSocket, gRPC, GraphQL, TCP/UDP, SSE, MCP, WebRTC, HTTP stream, and text providers with one API.
+
+## Why use this client?
+
+- One interface for many transports — providers describe endpoints, transports handle protocols.
+- Discovery + invocation — load providers, search by tags/descriptions, call tools or stream responses.
+- Config-driven — `new_with_providers` loads JSON provider manifests so you can ship endpoints without recompiling.
+- Codemode — generate and run Rhai snippets that orchestrate tools; includes an optional LLM-driven orchestrator.
+
+## Install / prereqs
+
+- Rust toolchain (1.70+ recommended)
+- `protoc` if you want to build the gRPC example
+
+Add to your project (path/git if not published):
+
+```bash
+cargo add rs-utcp
+```
 
 ## Quick start
 
-The fastest way to see UTCP working is to run the bundled demo that spins up a mock HTTP provider and loads it through `new_with_providers`:
+Run the bundled demo that spins up a mock HTTP provider and loads it via `new_with_providers`:
 
 ```bash
 cargo run --example basic_usage
 ```
 
-You should see a local provider start, tools listed, and a sample tool call printed.
+You’ll see the provider start, tools listed, and a sample tool call.
 
 ## Minimal client setup
 
@@ -25,9 +43,7 @@ use std::sync::Arc;
 
 # #[tokio::main]
 # async fn main() -> anyhow::Result<()> {
-// Load providers from a JSON file (see providers.json for shape).
 let config = UtcpClientConfig::new().with_providers_file("examples/providers.json".into());
-
 let repo = Arc::new(InMemoryToolRepository::new());
 let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
 let client = UtcpClient::new_with_providers(config, repo, search).await?;
@@ -39,8 +55,6 @@ println!("Found tools: {:?}", tools.iter().map(|t| &t.name).collect::<Vec<_>>())
 ```
 
 ### Provider JSON example
-
-`providers.json` supports multiple transports. This is enough for a simple HTTP provider:
 
 ```json
 {
@@ -56,71 +70,52 @@ println!("Found tools: {:?}", tools.iter().map(|t| &t.name).collect::<Vec<_>>())
 }
 ```
 
-Variables are substituted from `UtcpClientConfig::variables` or the environment.
+Variables are substituted from `UtcpClientConfig::variables` or environment variables.
 
 ## Example gallery
 
 - `cargo run --example basic_usage` — spin up a local HTTP provider, load via `new_with_providers`, call a tool.
-- `cargo run --example load_from_json` — load providers directly from `examples/providers.json`.
-- `cargo run --example http_server` — start a demo HTTP provider and call it.
-- `cargo run --example websocket_server` / `sse_server` / `tcp_server` / `udp_server` / `http_stream_server` / `grpc_server` / `graphql_server` / `mcp_server` — self-hosted provider for each transport, then call it.
+- `cargo run --example load_from_json` — load providers from `examples/providers.json`.
+- `cargo run --example http_server` — demo HTTP provider + client.
+- `cargo run --example websocket_server` / `sse_server` / `tcp_server` / `udp_server` / `http_stream_server` / `grpc_server` / `graphql_server` / `mcp_server` — self-hosted provider for each transport.
 - `cargo run --example cli_program` — treat the binary as its own CLI provider.
-- `cargo run --example codemode_eval` — evaluate Rust-like snippets (via Rhai) that can call UTCP tools.
-- `cargo run --example all_providers` — env-driven sampler for every transport (set `DEMO_*` vars to enable blocks).
+- `cargo run --example codemode_eval` — evaluate Rust-like snippets (Rhai) that can call UTCP tools.
+- `cargo run --example all_providers` — env-driven sampler for every transport (set `DEMO_*` vars).
 
-## Codemode (Rhai-based snippets)
+## Codemode
 
-Codemode lets you orchestrate UTCP tools from a Rust-like DSL powered by Rhai. Helpers available inside snippets:
+Rhai-powered orchestration of UTCP tools:
 
-- `call_tool("<provider.tool>", #{...args})` — invoke a UTCP tool and return JSON.
-- `search_tools("<query>", <limit>)` — find tools by name/description/tags.
-- `sprintf("hello {}", [value])` — string formatting helper.
+- Helpers inside snippets: `call_tool("<provider.tool>", #{...})`, `call_tool_stream`, `search_tools`, `sprintf`.
+- Example snippet:
+  ```text
+  let echo = call_tool("http_demo.echo", #{"message": "hi"});
+  echo
+  ```
+- Run the demo: `cargo run --example codemode_eval`
 
-Example snippet (from `examples/codemode_eval/main.rs`):
+LLM-driven orchestrator: implement `LlmModel::complete(prompt) -> String`, wire it into `CodemodeOrchestrator`, and it will (1) decide if tools are needed, (2) pick tools, (3) ask the model to emit a snippet, (4) execute via CodeMode.
 
-```text
-let a = 2 + 3;
-let echo = call_tool("http_demo.echo", #{"message": "hi"});
-echo
-```
+## Architecture notes
 
-Run it end-to-end (spins up a demo HTTP provider under the hood):
-
-```bash
-cargo run --example codemode_eval
-```
-
-## Why UTCP here?
-
-- One client, many transports: providers describe how to talk to tools; transports handle the protocol details.
-- Discovery + invocation: load providers, search by tags/descriptions, call tools or stream responses.
-- Config-driven: `new_with_providers` reads JSON/YAML-like provider configs so you can ship endpoints without code changes.
-
-## Project layout
-
-- `src/lib.rs` — `UtcpClient` plus `UtcpClientInterface`.
-- `src/providers/` — provider definitions (HTTP, CLI, WS, gRPC, GraphQL, TCP, UDP, SSE, MCP, WebRTC, HTTP stream, text).
-- `src/transports/` — transport implementations matching provider types.
-- `src/repository/` — tool repository abstraction + in-memory impl.
-- `src/tag/` — tag-based search (`TagSearchStrategy`).
-- `examples/` — runnable demos; most spin up their own provider servers.
+- `UtcpClient` caches provider tools and resolved tool → transport bindings for fast calls.
+- Transports live in `src/transports/` (http, cli, ws, grpc, graphql, tcp, udp, sse, mcp, webrtc, http_stream, text).
+- Providers mirror transports in `src/providers/`.
+- Repository abstraction in `src/repository/` (in-memory default).
+- Tag-based search in `src/tag/`.
 
 ## Development
 
-Prereqs: Rust toolchain + `protoc` (for gRPC example builds).
-
-Common tasks:
-
 - Format: `cargo fmt`
-- Lint/check examples: `cargo check --examples`
+- Check: `cargo check --examples`
 - Tests: `cargo test`
-- Run a demo: `cargo run --example http_server` (or any from the gallery above)
+- Try a demo: `cargo run --example http_server` (or any from the gallery)
 
 ## Status
 
-- HTTP is feature-complete; other transports are usable demo skeletons and ready for extension.
-- Authentication helpers exist (API key, basic, OAuth2 scaffolding).
-- OpenAPI/spec generation is on the roadmap.
+- HTTP is feature-complete; other transports are demo-ready skeletons.
+- Auth helpers exist (API key, basic, OAuth2 scaffolding).
+- OpenAPI/spec generation is planned.
 
 ## License
 

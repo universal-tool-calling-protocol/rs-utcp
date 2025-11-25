@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use anyhow::{anyhow, Result};
 use rhai::{Dynamic, Engine, EvalAltResult, Map, Scope};
@@ -158,6 +159,123 @@ impl CodeModeUtcp {
 
     pub async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>> {
         self.client.search_tools(query, limit).await
+    }
+}
+
+#[async_trait::async_trait]
+pub trait LlmModel: Send + Sync {
+    async fn complete(&self, prompt: &str) -> Result<String>;
+}
+
+/// High-level orchestrator that mirrors go-utcp's CodeMode flow:
+/// 1) Decide if tools are needed
+/// 2) Select tools by name
+/// 3) Ask the model to emit a Rhai snippet using call_tool helpers
+/// 4) Execute the snippet via CodeMode
+pub struct CodemodeOrchestrator {
+    codemode: Arc<CodeModeUtcp>,
+    model: Arc<dyn LlmModel>,
+    tool_specs_cache: RwLock<Option<String>>,
+}
+
+impl CodemodeOrchestrator {
+    pub fn new(codemode: Arc<CodeModeUtcp>, model: Arc<dyn LlmModel>) -> Self {
+        Self {
+            codemode,
+            model,
+            tool_specs_cache: RwLock::new(None),
+        }
+    }
+
+    /// Run the full orchestration flow. Returns Ok(None) if the model says no tools are needed
+    /// or fails to pick any tools. Otherwise returns the codemode execution result.
+    pub async fn call_prompt(&self, prompt: &str) -> Result<Option<Value>> {
+        let specs = self.render_tool_specs().await?;
+
+        if !self.decide_if_tools_needed(prompt, &specs).await? {
+            return Ok(None);
+        }
+
+        let selected = self.select_tools(prompt, &specs).await?;
+        if selected.is_empty() {
+            return Ok(None);
+        }
+
+        let snippet = self.generate_snippet(prompt, &selected, &specs).await?;
+        let raw = self
+            .codemode
+            .execute(CodeModeArgs {
+                code: snippet,
+                timeout: Some(20_000),
+            })
+            .await?;
+
+        Ok(Some(raw.value))
+    }
+
+    async fn render_tool_specs(&self) -> Result<String> {
+        {
+            let cache = self.tool_specs_cache.read().await;
+            if let Some(specs) = &*cache {
+                return Ok(specs.clone());
+            }
+        }
+
+        let tools = self
+            .codemode
+            .search_tools("", 200)
+            .await
+            .unwrap_or_default();
+        let mut rendered = String::new();
+        for tool in tools {
+            rendered.push_str(&format!("- {}: {}\n", tool.name, tool.description));
+        }
+
+        let mut cache = self.tool_specs_cache.write().await;
+        *cache = Some(rendered.clone());
+        Ok(rendered)
+    }
+
+    async fn decide_if_tools_needed(&self, prompt: &str, specs: &str) -> Result<bool> {
+        let request = format!(
+            "You can call tools described below. Respond with only 'yes' or 'no'.\n\nTOOLS:\n{}\n\nUSER:\n{}",
+            specs, prompt
+        );
+        let resp = self.model.complete(&request).await?;
+        Ok(resp.trim_start().to_ascii_lowercase().starts_with('y'))
+    }
+
+    async fn select_tools(&self, prompt: &str, specs: &str) -> Result<Vec<String>> {
+        let request = format!(
+            "Choose relevant tool names from the list. Respond with a comma-separated list of names only.\n\nTOOLS:\n{}\n\nUSER:\n{}",
+            specs, prompt
+        );
+        let resp = self.model.complete(&request).await?;
+        let mut out = Vec::new();
+        for name in resp.split(',') {
+            let n = name.trim();
+            if !n.is_empty() {
+                out.push(n.to_string());
+            }
+        }
+        Ok(out)
+    }
+
+    async fn generate_snippet(
+        &self,
+        prompt: &str,
+        tools: &[String],
+        specs: &str,
+    ) -> Result<String> {
+        let tool_list = tools.join(", ");
+        let request = format!(
+            "Write a Rhai snippet that uses ONLY these tools: {tool_list}.\n\
+Use helpers: call_tool(name, map), call_tool_stream(name, map), search_tools(query, limit), sprintf(fmt, list).\n\
+Do not add imports. End by producing a value (the snippet return value). \
+Use exact field names from the schemas. The tools available:\n{specs}\n\nUSER:\n{prompt}"
+        );
+        let resp = self.model.complete(&request).await?;
+        Ok(resp.trim().to_string())
     }
 }
 
