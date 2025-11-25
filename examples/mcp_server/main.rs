@@ -4,7 +4,8 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use rs_utcp::UtcpClientInterface;
 use serde_json::json;
-
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
