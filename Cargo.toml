@@ -1,0 +1,38 @@
+[package]
+name = "rs-utcp"
+version = "0.1.0"
+edition = "2021"
+repository = "https:/github.com/universal-tool-calling-protocol/rs-utcp"
+
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+anyhow = "1.0"
+
+thiserror = "1.0"
+reqwest = { version = "0.11", features = ["json", "stream"] }
+futures = "0.3"
+regex = "1.0"
+tokio-tungstenite = "0.21"
+pin-project = "1.0"
+tonic = { version = "0.11", features = ["transport"] }
+prost = "0.12"
+prost-types = "0.12"
+base64 = "0.21"
+bytes = "1"
+rhai = { version = "1.18", features = ["serde"] }
+
+[build-dependencies]
+tonic-build = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+hyper = { version = "0.14", features = ["full"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+prost = "0.12"
+tonic = { version = "0.11", features = ["transport"] }
+tokio-stream = { version = "0.1", features = ["net"] }

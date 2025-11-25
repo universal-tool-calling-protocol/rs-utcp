@@ -1,4 +1,4 @@
-# rust-utcp
+# rs-utcp
 
 A Rust implementation of the Universal Tool Calling Protocol (UTCP) client, based on `go-utcp`.
 
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     let client = UtcpClient::new(config, repo, search);
     
     // Register a provider (example)
-    // let provider = HttpProvider::new(...);
+    // let provider = HttpProvider::new(..., None);
     // let tools = client.register_tool_provider(Arc::new(provider)).await?;
     
     // Call a tool
@@ -88,6 +88,32 @@ async fn main() -> anyhow::Result<()> {
 - Load providers from JSON: `cargo run --example load_from_json`
 - All providers/transport patterns (env-gated):  
   `DEMO_HTTP_URL=https://httpbin.org/post DEMO_WS_URL=wss://echo.websocket.events cargo run --example all_providers`
+- Self-hosted demos (spin up server + client in one binary):
+  - HTTP: `cargo run --example http_server`
+- WebSocket: `cargo run --example websocket_server`
+- SSE: `cargo run --example sse_server`
+- TCP: `cargo run --example tcp_server`
+- UDP: `cargo run --example udp_server`
+- HTTP stream: `cargo run --example http_stream_server`
+- Codemode (Rust-like DSL): `cargo run --example codemode_eval`
+
+### Codemode (Rust-like DSL)
+
+Codemode lets you orchestrate UTCP tools by evaluating Rust-like snippets (powered by Rhai) with helper functions injected:
+
+- `call_tool("<provider.tool>", #{...args})`
+- `search_tools("<query>", <limit>)`
+- `sprintf("hello {}", [value])`
+
+Example snippet:
+
+```text
+let sum = 2 + 3;
+let echoed = call_tool("http_demo.echo", #{"message": "hi"});
+sum // returned as __out
+```
+
+See `examples/codemode_eval/main.rs` for a runnable demo.
 
 ## Core Components
 

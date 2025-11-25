@@ -1,0 +1,31 @@
+{
+    "providers": [
+        {
+            "provider_type": "http",
+            "name": "weather_api",
+            "url": "https://api.weather.example.com/tools",
+            "http_method": "GET",
+            "headers": {
+                "Accept": "application/json"
+            }
+        },
+        {
+            "provider_type": "cli",
+            "name": "git_tools",
+            "command_name": "git",
+            "working_dir": "/path/to/repo"
+        },
+        {
+            "provider_type": "http",
+            "name": "api_with_auth",
+            "url": "https://api.example.com/utcp",
+            "http_method": "GET",
+            "auth": {
+                "auth_type": "api_key",
+                "api_key": "${API_KEY}",
+                "var_name": "X-API-Key",
+                "location": "header"
+            }
+        }
+    ]
+}

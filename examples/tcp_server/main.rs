@@ -1,0 +1,50 @@
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use rs_utcp::{
+    config::UtcpClientConfig, providers::tcp::TcpProvider,
+    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
+    UtcpClientInterface,
+};
+use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let addr = spawn_tcp_server().await?;
+    println!("Started TCP demo at {addr}");
+
+    let repo = Arc::new(InMemoryToolRepository::new());
+    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
+    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
+
+    let provider = TcpProvider::new("tcp_demo".into(), addr.ip().to_string(), addr.port(), None);
+    client.register_tool_provider(Arc::new(provider)).await?;
+
+    let mut args = std::collections::HashMap::new();
+    args.insert("message".into(), serde_json::json!("hello tcp"));
+    let res = client.call_tool("tcp_demo.echo", args).await?;
+    println!("Result: {}", serde_json::to_string_pretty(&res)?);
+    Ok(())
+}
+
+async fn spawn_tcp_server() -> anyhow::Result<SocketAddr> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buf = Vec::new();
+                if socket.read_to_end(&mut buf).await.is_ok() {
+                    let val: Value = serde_json::from_slice(&buf).unwrap_or(Value::Null);
+                    let _ = socket.write_all(val.to_string().as_bytes()).await;
+                }
+            });
+        }
+    });
+    Ok(addr)
+}
