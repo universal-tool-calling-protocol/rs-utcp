@@ -78,6 +78,7 @@ Variables are substituted from `UtcpClientConfig::variables` or environment vari
 - `cargo run --example load_from_json` — load providers from `examples/providers.json`.
 - `cargo run --example http_server` — demo HTTP provider + client.
 - `cargo run --example websocket_server` / `sse_server` / `tcp_server` / `udp_server` / `http_stream_server` / `grpc_server` / `graphql_server` / `mcp_server` — self-hosted provider for each transport.
+- `cargo run --example mcp_stdio` — MCP stdio transport with a Python calculator server (see [MCP_STDIO_README.md](examples/MCP_STDIO_README.md)).
 - `cargo run --example cli_program` — treat the binary as its own CLI provider.
 - `cargo run --example codemode_eval` — evaluate Rust-like snippets (Rhai) that can call UTCP tools.
 - `cargo run --example all_providers` — env-driven sampler for every transport (set `DEMO_*` vars).
