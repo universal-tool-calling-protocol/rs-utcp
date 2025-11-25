@@ -2,7 +2,14 @@
 name = "rs-utcp"
 version = "0.1.0"
 edition = "2021"
-repository = "https:/github.com/universal-tool-calling-protocol/rs-utcp"
+description = "Rust implementation of the Universal Tool Calling Protocol (UTCP)."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/universal-tool-calling-protocol/rs-utcp"
+homepage = "https://github.com/universal-tool-calling-protocol/rs-utcp"
+documentation = "https://docs.rs/rs-utcp"
+readme = "README.md"
+keywords = ["utcp", "tool-calling", "protocol", "ai"]
+categories = ["ai", "protocols"]
 
 
 [dependencies]
