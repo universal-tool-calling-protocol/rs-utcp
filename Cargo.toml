@@ -9,8 +9,7 @@ homepage = "https://github.com/universal-tool-calling-protocol/rs-utcp"
 documentation = "https://docs.rs/rs-utcp"
 readme = "README.md"
 keywords = ["utcp", "tool-calling", "protocol", "ai"]
-categories = ["ai", "protocols"]
-
+categories = ["development-tools", "network-programming"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
