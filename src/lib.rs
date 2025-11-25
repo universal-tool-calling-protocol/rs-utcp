@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::UtcpClientConfig;
-use crate::providers::base::Provider;
+use crate::providers::base::{Provider, ProviderType};
 use crate::repository::ToolRepository;
 use crate::tools::{Tool, ToolSearchStrategy};
 use crate::transports::stream::StreamResult;
@@ -47,6 +47,14 @@ pub struct UtcpClient {
     search_strategy: Arc<dyn ToolSearchStrategy>,
 
     provider_tools_cache: RwLock<HashMap<String, Vec<Tool>>>,
+    resolved_tools_cache: RwLock<HashMap<String, ResolvedTool>>,
+}
+
+#[derive(Clone)]
+struct ResolvedTool {
+    provider: Arc<dyn Provider>,
+    transport: Arc<dyn ClientTransport>,
+    call_name: String,
 }
 
 impl UtcpClient {
@@ -113,6 +121,7 @@ impl UtcpClient {
             tool_repository: repo,
             search_strategy: strat,
             provider_tools_cache: RwLock::new(HashMap::new()),
+            resolved_tools_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -143,6 +152,63 @@ impl UtcpClient {
 
         Ok(client)
     }
+
+    fn call_name_for_provider(tool_name: &str, provider_type: ProviderType) -> String {
+        match provider_type {
+            ProviderType::Mcp | ProviderType::Text => tool_name
+                .splitn(2, '.')
+                .nth(1)
+                .unwrap_or(tool_name)
+                .to_string(),
+            _ => tool_name.to_string(),
+        }
+    }
+
+    async fn resolve_tool(&self, tool_name: &str) -> Result<ResolvedTool> {
+        {
+            let cache = self.resolved_tools_cache.read().await;
+            if let Some(resolved) = cache.get(tool_name) {
+                return Ok(resolved.clone());
+            }
+        }
+
+        let parts: Vec<&str> = tool_name.splitn(2, '.').collect();
+        if parts.len() != 2 {
+            return Err(anyhow!(
+                "Invalid tool name format. Expected 'provider.tool', got: {}",
+                tool_name
+            ));
+        }
+        let provider_name = parts[0];
+
+        let prov = self
+            .tool_repository
+            .get_provider(provider_name)
+            .await?
+            .ok_or_else(|| anyhow!("Provider not found: {}", provider_name))?;
+        let provider_type = prov.type_();
+
+        let transport_key = provider_type.as_key().to_string();
+        let transport = self
+            .transports
+            .get(&transport_key)
+            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?
+            .clone();
+
+        let call_name = Self::call_name_for_provider(tool_name, provider_type.clone());
+        let resolved = ResolvedTool {
+            provider: prov.clone(),
+            transport: transport.clone(),
+            call_name,
+        };
+
+        {
+            let mut cache = self.resolved_tools_cache.write().await;
+            cache.insert(tool_name.to_string(), resolved.clone());
+        }
+
+        Ok(resolved)
+    }
 }
 
 #[async_trait]
@@ -164,7 +230,8 @@ impl UtcpClientInterface for UtcpClient {
         let transport = self
             .transports
             .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?;
+            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?
+            .clone();
 
         // Register with transport
         let tools = transport.register_tool_provider(prov.as_ref()).await?;
@@ -187,6 +254,21 @@ impl UtcpClientInterface for UtcpClient {
         {
             let mut cache = self.provider_tools_cache.write().await;
             cache.insert(provider_name, normalized_tools.clone());
+        }
+
+        {
+            let mut resolved = self.resolved_tools_cache.write().await;
+            for tool in &normalized_tools {
+                let call_name = Self::call_name_for_provider(&tool.name, provider_type.clone());
+                resolved.insert(
+                    tool.name.clone(),
+                    ResolvedTool {
+                        provider: prov.clone(),
+                        transport: transport.clone(),
+                        call_name,
+                    },
+                );
+            }
         }
 
         Ok(normalized_tools)
@@ -219,6 +301,10 @@ impl UtcpClientInterface for UtcpClient {
             let mut cache = self.provider_tools_cache.write().await;
             cache.remove(provider_name);
         }
+        {
+            let mut resolved = self.resolved_tools_cache.write().await;
+            resolved.retain(|tool_name, _| !tool_name.starts_with(&format!("{}.", provider_name)));
+        }
 
         Ok(())
     }
@@ -228,34 +314,11 @@ impl UtcpClientInterface for UtcpClient {
         tool_name: &str,
         args: HashMap<String, serde_json::Value>,
     ) -> Result<serde_json::Value> {
-        // Parse tool name to get provider name
-        let parts: Vec<&str> = tool_name.splitn(2, '.').collect();
-        if parts.len() != 2 {
-            return Err(anyhow!(
-                "Invalid tool name format. Expected 'provider.tool', got: {}",
-                tool_name
-            ));
-        }
-
-        let provider_name = parts[0];
-
-        // Get provider from repository
-        let prov = self
-            .tool_repository
-            .get_provider(provider_name)
-            .await?
-            .ok_or_else(|| anyhow!("Provider not found: {}", provider_name))?;
-
-        // Get transport
-        let provider_type = prov.type_();
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?;
-
-        // Call tool
-        transport.call_tool(tool_name, args, prov.as_ref()).await
+        let resolved = self.resolve_tool(tool_name).await?;
+        resolved
+            .transport
+            .call_tool(&resolved.call_name, args, resolved.provider.as_ref())
+            .await
     }
 
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>> {
@@ -271,35 +334,10 @@ impl UtcpClientInterface for UtcpClient {
         tool_name: &str,
         args: HashMap<String, serde_json::Value>,
     ) -> Result<Box<dyn StreamResult>> {
-        // Parse tool name to get provider name
-        let parts: Vec<&str> = tool_name.splitn(2, '.').collect();
-        if parts.len() != 2 {
-            return Err(anyhow!(
-                "Invalid tool name format. Expected 'provider.tool', got: {}",
-                tool_name
-            ));
-        }
-
-        let provider_name = parts[0];
-
-        // Get provider from repository
-        let prov = self
-            .tool_repository
-            .get_provider(provider_name)
-            .await?
-            .ok_or_else(|| anyhow!("Provider not found: {}", provider_name))?;
-
-        // Get transport
-        let provider_type = prov.type_();
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?;
-
-        // Call tool stream
-        transport
-            .call_tool_stream(tool_name, args, prov.as_ref())
+        let resolved = self.resolve_tool(tool_name).await?;
+        resolved
+            .transport
+            .call_tool_stream(&resolved.call_name, args, resolved.provider.as_ref())
             .await
     }
 }
