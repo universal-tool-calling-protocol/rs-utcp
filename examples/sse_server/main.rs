@@ -1,26 +1,28 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
+use std::{convert::Infallible, net::SocketAddr, time::Duration};
 
 use futures_util::stream::{self, StreamExt};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use rs_utcp::{
-    config::UtcpClientConfig, providers::sse::SseProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::json;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = spawn_sse_server().await?;
     println!("Started SSE demo at http://{addr}/tools");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = SseProvider::new("sse_demo".into(), format!("http://{addr}/tools"), None);
-    let tools = client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "sse",
+            "name": "sse_demo",
+            "url": format!("http://{addr}/tools")
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!(
         "Tools: {:?}",
         tools.iter().map(|t| &t.name).collect::<Vec<_>>()

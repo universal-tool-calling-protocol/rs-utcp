@@ -1,27 +1,28 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
-use rs_utcp::{
-    config::UtcpClientConfig, providers::websocket::WebSocketProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::json;
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = spawn_ws_server().await?;
     println!("Started WS demo at ws://{addr}/tools");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = WebSocketProvider::new("ws_demo".into(), format!("ws://{addr}/tools"), None);
-    let tools = client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "websocket",
+            "name": "ws_demo",
+            "url": format!("ws://{addr}/tools")
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!(
         "Tools: {:?}",
         tools.iter().map(|t| &t.name).collect::<Vec<_>>()

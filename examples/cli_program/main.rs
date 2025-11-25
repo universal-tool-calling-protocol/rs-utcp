@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 use std::env;
-use std::sync::Arc;
 
-use rs_utcp::{
-    config::UtcpClientConfig, providers::cli::CliProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, tools::Tool,
-    UtcpClient, UtcpClientInterface,
-};
+use rs_utcp::{tools::Tool, UtcpClientInterface};
 use serde_json::json;
 use tokio::io::AsyncReadExt;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,12 +19,15 @@ async fn main() -> anyhow::Result<()> {
     let self_path = env::current_exe()?;
     let command_name = format!("{} --cli-mode", self_path.display());
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = CliProvider::new("cli_demo".into(), command_name, None);
-    let tools = client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "cli",
+            "name": "cli_demo",
+            "command_name": command_name
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!(
         "Tools: {:?}",
         tools.iter().map(|t| &t.name).collect::<Vec<_>>()

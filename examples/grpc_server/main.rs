@@ -1,19 +1,17 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use rs_utcp::{
-    config::UtcpClientConfig,
     grpcpb::generated::{
         utcp_service_server::{UtcpService, UtcpServiceServer},
         Empty, Manual, Tool as PbTool, ToolCallRequest, ToolCallResponse,
     },
-    providers::grpc::GrpcProvider,
-    repository::in_memory::InMemoryToolRepository,
-    tag::tag_search::TagSearchStrategy,
-    UtcpClient, UtcpClientInterface,
+    UtcpClientInterface,
 };
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{transport::Server, Request, Response, Status};
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[derive(Default)]
 struct DemoGrpc;
@@ -53,12 +51,15 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_grpc_server().await?;
     println!("Started gRPC demo at {addr}");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = GrpcProvider::new("grpc_demo".into(), "127.0.0.1".into(), addr.port(), None);
-    client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(serde_json::json!({
+        "providers": [{
+            "provider_type": "grpc",
+            "name": "grpc_demo",
+            "host": "127.0.0.1",
+            "port": addr.port()
+        }]
+    }))
+    .await?;
 
     let mut args = std::collections::HashMap::new();
     args.insert("message".into(), serde_json::json!("hello grpc"));

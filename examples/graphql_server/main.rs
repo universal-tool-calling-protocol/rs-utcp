@@ -1,29 +1,27 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use rs_utcp::{
-    config::UtcpClientConfig, providers::graphql::GraphqlProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::json;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = spawn_graphql_server().await?;
     println!("Started GraphQL demo at http://{addr}/graphql");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = GraphqlProvider::new(
-        "graphql_demo".into(),
-        format!("http://{addr}/graphql"),
-        None,
-    );
-    let tools = client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "graphql",
+            "name": "graphql_demo",
+            "url": format!("http://{addr}/graphql")
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!(
         "Tools: {:?}",
         tools.iter().map(|t| &t.name).collect::<Vec<_>>()

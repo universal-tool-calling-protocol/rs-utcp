@@ -1,25 +1,26 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
-use rs_utcp::{
-    config::UtcpClientConfig, providers::udp::UdpProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::Value;
 use tokio::net::UdpSocket;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = spawn_udp_server().await?;
     println!("Started UDP demo at {addr}");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = UdpProvider::new("udp_demo".into(), addr.ip().to_string(), addr.port(), None);
-    client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(serde_json::json!({
+        "providers": [{
+            "provider_type": "udp",
+            "name": "udp_demo",
+            "host": addr.ip().to_string(),
+            "port": addr.port()
+        }]
+    }))
+    .await?;
 
     let mut args = std::collections::HashMap::new();
     args.insert("message".into(), serde_json::json!("hello udp"));

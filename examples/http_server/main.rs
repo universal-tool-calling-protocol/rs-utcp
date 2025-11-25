@@ -1,13 +1,12 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use rs_utcp::{
-    config::UtcpClientConfig, providers::http::HttpProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::json;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,19 +14,17 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_demo_server().await?;
     println!("Started demo HTTP server at http://{addr}/tools");
 
-    // Build UTCP client
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    // Register provider pointing at the demo server
-    let provider = HttpProvider::new(
-        "demo".into(),
-        format!("http://{addr}/tools"),
-        "POST".into(),
-        None,
-    );
-    let tools = client.register_tool_provider(Arc::new(provider)).await?;
+    // Build UTCP client from a provider config file
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "http",
+            "name": "demo",
+            "url": format!("http://{addr}/tools"),
+            "http_method": "POST"
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!(
         "Registered tools: {:?}",
         tools.iter().map(|t| t.name.clone()).collect::<Vec<_>>()

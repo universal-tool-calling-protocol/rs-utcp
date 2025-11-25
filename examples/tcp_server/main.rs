@@ -1,26 +1,27 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
-use rs_utcp::{
-    config::UtcpClientConfig, providers::tcp::TcpProvider,
-    repository::in_memory::InMemoryToolRepository, tag::tag_search::TagSearchStrategy, UtcpClient,
-    UtcpClientInterface,
-};
+use rs_utcp::UtcpClientInterface;
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = spawn_tcp_server().await?;
     println!("Started TCP demo at {addr}");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
-    let provider = TcpProvider::new("tcp_demo".into(), addr.ip().to_string(), addr.port(), None);
-    client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(serde_json::json!({
+        "providers": [{
+            "provider_type": "tcp",
+            "name": "tcp_demo",
+            "host": addr.ip().to_string(),
+            "port": addr.port()
+        }]
+    }))
+    .await?;
 
     let mut args = std::collections::HashMap::new();
     args.insert("message".into(), serde_json::json!("hello tcp"));

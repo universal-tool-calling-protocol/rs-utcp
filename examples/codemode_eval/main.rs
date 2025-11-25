@@ -1,16 +1,12 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use rs_utcp::{
-    config::UtcpClientConfig,
-    plugins::codemode::{CodeModeArgs, CodeModeUtcp},
-    providers::http::HttpProvider,
-    repository::in_memory::InMemoryToolRepository,
-    tag::tag_search::TagSearchStrategy,
-    UtcpClient, UtcpClientInterface,
-};
+use rs_utcp::plugins::codemode::{CodeModeArgs, CodeModeUtcp};
 use serde_json::json;
+
+#[path = "../common/mod.rs"]
+mod common;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,13 +14,15 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_http_server().await?;
     let echo_url = format!("http://{addr}/tools");
 
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = Arc::new(UtcpClient::new(UtcpClientConfig::default(), repo, search));
-
-    // Register a basic HTTP provider to allow call_tool usage in codemode.
-    let provider = HttpProvider::new("http_demo".into(), echo_url, "POST".into(), None);
-    client.register_tool_provider(Arc::new(provider)).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "http",
+            "name": "http_demo",
+            "url": echo_url,
+            "http_method": "POST"
+        }]
+    }))
+    .await?;
 
     // Create codemode orchestrator
     let codemode = CodeModeUtcp::new(client.clone());

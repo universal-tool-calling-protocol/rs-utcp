@@ -8,27 +8,14 @@
 //!   cargo run --example all_providers
 
 use anyhow::Result;
-use rs_utcp::config::UtcpClientConfig;
-use rs_utcp::providers::cli::CliProvider;
-use rs_utcp::providers::graphql::GraphqlProvider;
-use rs_utcp::providers::grpc::GrpcProvider;
-use rs_utcp::providers::http::HttpProvider;
-use rs_utcp::providers::http_stream::StreamableHttpProvider;
-use rs_utcp::providers::mcp::McpProvider;
-use rs_utcp::providers::sse::SseProvider;
-use rs_utcp::providers::tcp::TcpProvider;
-use rs_utcp::providers::text::TextProvider;
-use rs_utcp::providers::udp::UdpProvider;
-use rs_utcp::providers::webrtc::WebRtcProvider;
-use rs_utcp::providers::websocket::WebSocketProvider;
-use rs_utcp::repository::in_memory::InMemoryToolRepository;
-use rs_utcp::tag::tag_search::TagSearchStrategy;
-use rs_utcp::{UtcpClient, UtcpClientInterface};
+use rs_utcp::UtcpClientInterface;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::time::{timeout, Duration};
+
+#[path = "common/mod.rs"]
+mod common;
 
 fn env(key: &str) -> Option<String> {
     std::env::var(key).ok()
@@ -36,62 +23,64 @@ fn env(key: &str) -> Option<String> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let repo = Arc::new(InMemoryToolRepository::new());
-    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    let client = UtcpClient::new(UtcpClientConfig::default(), repo, search);
-
     println!("Running provider demos (set DEMO_* env vars to enable a block):");
 
-    if let Err(e) = demo_http(&client).await {
+    if let Err(e) = demo_http().await {
         eprintln!("HTTP demo error: {e}");
     }
-    if let Err(e) = demo_cli(&client).await {
+    if let Err(e) = demo_cli().await {
         eprintln!("CLI demo error: {e}");
     }
-    if let Err(e) = demo_websocket(&client).await {
+    if let Err(e) = demo_websocket().await {
         eprintln!("WebSocket demo error: {e}");
     }
-    if let Err(e) = demo_graphql(&client).await {
+    if let Err(e) = demo_graphql().await {
         eprintln!("GraphQL demo error: {e}");
     }
-    if let Err(e) = demo_grpc(&client).await {
+    if let Err(e) = demo_grpc().await {
         eprintln!("gRPC demo error: {e}");
     }
-    if let Err(e) = demo_tcp(&client).await {
+    if let Err(e) = demo_tcp().await {
         eprintln!("TCP demo error: {e}");
     }
-    if let Err(e) = demo_udp(&client).await {
+    if let Err(e) = demo_udp().await {
         eprintln!("UDP demo error: {e}");
     }
-    if let Err(e) = demo_sse(&client).await {
+    if let Err(e) = demo_sse().await {
         eprintln!("SSE demo error: {e}");
     }
-    if let Err(e) = demo_http_stream(&client).await {
+    if let Err(e) = demo_http_stream().await {
         eprintln!("HTTP stream demo error: {e}");
     }
-    if let Err(e) = demo_mcp(&client).await {
+    if let Err(e) = demo_mcp().await {
         eprintln!("MCP demo error: {e}");
     }
-    if let Err(e) = demo_text(&client).await {
+    if let Err(e) = demo_text().await {
         eprintln!("Text demo error: {e}");
     }
-    if let Err(e) = demo_webrtc(&client).await {
+    if let Err(e) = demo_webrtc().await {
         eprintln!("WebRTC demo error: {e}");
     }
 
     Ok(())
 }
 
-async fn demo_http(client: &UtcpClient) -> Result<()> {
+async fn demo_http() -> Result<()> {
     let Some(url) = env("DEMO_HTTP_URL") else {
         println!("  ▫️ HTTP: set DEMO_HTTP_URL to run");
         return Ok(());
     };
 
     println!("  ▶️ HTTP -> {url}");
-    let provider = HttpProvider::new("http_demo".into(), url, "POST".into(), None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "http",
+            "name": "http_demo",
+            "url": url,
+            "http_method": "POST"
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("echo".into(), json!("hello from rust-utcp"));
@@ -100,15 +89,20 @@ async fn demo_http(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_cli(client: &UtcpClient) -> Result<()> {
+async fn demo_cli() -> Result<()> {
     let Some(cmd) = env("DEMO_CLI_CMD") else {
         println!("  ▫️ CLI: set DEMO_CLI_CMD (e.g., echo '{{\"tools\":[]}}') to run");
         return Ok(());
     };
     println!("  ▶️ CLI -> {cmd}");
-    let provider = CliProvider::new("cli_demo".into(), cmd, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "cli",
+            "name": "cli_demo",
+            "command_name": cmd
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("msg".into(), json!("hello cli"));
@@ -117,15 +111,20 @@ async fn demo_cli(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_websocket(client: &UtcpClient) -> Result<()> {
+async fn demo_websocket() -> Result<()> {
     let Some(url) = env("DEMO_WS_URL") else {
         println!("  ▫️ WebSocket: set DEMO_WS_URL to run (e.g., wss://echo.websocket.events)");
         return Ok(());
     };
     println!("  ▶️ WebSocket -> {url}");
-    let provider = WebSocketProvider::new("ws_demo".into(), url, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "websocket",
+            "name": "ws_demo",
+            "url": url
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("text".into(), json!("hello websocket"));
@@ -134,15 +133,20 @@ async fn demo_websocket(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_graphql(client: &UtcpClient) -> Result<()> {
+async fn demo_graphql() -> Result<()> {
     let Some(url) = env("DEMO_GRAPHQL_URL") else {
         println!("  ▫️ GraphQL: set DEMO_GRAPHQL_URL to run");
         return Ok(());
     };
     println!("  ▶️ GraphQL -> {url}");
-    let provider = GraphqlProvider::new("graphql_demo".into(), url, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "graphql",
+            "name": "graphql_demo",
+            "url": url
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("name".into(), json!("rust-utcp"));
@@ -151,16 +155,22 @@ async fn demo_graphql(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_grpc(client: &UtcpClient) -> Result<()> {
+async fn demo_grpc() -> Result<()> {
     let (Some(host), Some(port)) = (env("DEMO_GRPC_HOST"), env("DEMO_GRPC_PORT")) else {
         println!("  ▫️ gRPC: set DEMO_GRPC_HOST and DEMO_GRPC_PORT to run");
         return Ok(());
     };
     let port: u16 = port.parse().unwrap_or(50051);
     println!("  ▶️ gRPC -> {host}:{port}");
-    let provider = GrpcProvider::new("grpc_demo".into(), host, port, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "grpc",
+            "name": "grpc_demo",
+            "host": host,
+            "port": port
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("echo".into(), json!("hello grpc"));
@@ -169,16 +179,22 @@ async fn demo_grpc(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_tcp(client: &UtcpClient) -> Result<()> {
+async fn demo_tcp() -> Result<()> {
     let Some(addr) = env("DEMO_TCP_ADDR") else {
         println!("  ▫️ TCP: set DEMO_TCP_ADDR (host:port) to run");
         return Ok(());
     };
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ TCP -> {addr}");
-    let provider = TcpProvider::new("tcp_demo".into(), host, port, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "tcp",
+            "name": "tcp_demo",
+            "host": host,
+            "port": port
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("ping".into(), json!("pong"));
@@ -187,16 +203,22 @@ async fn demo_tcp(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_udp(client: &UtcpClient) -> Result<()> {
+async fn demo_udp() -> Result<()> {
     let Some(addr) = env("DEMO_UDP_ADDR") else {
         println!("  ▫️ UDP: set DEMO_UDP_ADDR (host:port) to run");
         return Ok(());
     };
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ UDP -> {addr}");
-    let provider = UdpProvider::new("udp_demo".into(), host, port, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "udp",
+            "name": "udp_demo",
+            "host": host,
+            "port": port
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("ping".into(), json!("pong"));
@@ -205,15 +227,20 @@ async fn demo_udp(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_sse(client: &UtcpClient) -> Result<()> {
+async fn demo_sse() -> Result<()> {
     let Some(url) = env("DEMO_SSE_URL") else {
         println!("  ▫️ SSE: set DEMO_SSE_URL to run");
         return Ok(());
     };
     println!("  ▶️ SSE -> {url}");
-    let provider = SseProvider::new("sse_demo".into(), url, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "sse",
+            "name": "sse_demo",
+            "url": url
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("topic".into(), json!("demo"));
@@ -224,15 +251,20 @@ async fn demo_sse(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_http_stream(client: &UtcpClient) -> Result<()> {
+async fn demo_http_stream() -> Result<()> {
     let Some(url) = env("DEMO_HTTP_STREAM_URL") else {
         println!("  ▫️ HTTP Stream: set DEMO_HTTP_STREAM_URL to run");
         return Ok(());
     };
     println!("  ▶️ HTTP Stream -> {url}");
-    let provider = StreamableHttpProvider::new("http_stream_demo".into(), url, None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "http_stream",
+            "name": "http_stream_demo",
+            "url": url
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("query".into(), json!("stream me"));
@@ -245,15 +277,21 @@ async fn demo_http_stream(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_mcp(client: &UtcpClient) -> Result<()> {
+async fn demo_mcp() -> Result<()> {
     let Some(url) = env("DEMO_MCP_URL") else {
         println!("  ▫️ MCP: set DEMO_MCP_URL to run");
         return Ok(());
     };
     println!("  ▶️ MCP -> {url}");
-    let provider = McpProvider::new("mcp_demo".into(), url, None);
-    let provider = Arc::new(provider);
-    let tools = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "mcp",
+            "name": "mcp_demo",
+            "url": url
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!("    tools: {}", tools.len());
 
     let mut args = HashMap::new();
@@ -263,7 +301,7 @@ async fn demo_mcp(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_text(client: &UtcpClient) -> Result<()> {
+async fn demo_text() -> Result<()> {
     let Some(path) = env("DEMO_TEXT_PATH") else {
         println!(
             "  ▫️ Text: set DEMO_TEXT_PATH to a folder containing tools.json and scripts to run"
@@ -272,9 +310,15 @@ async fn demo_text(client: &UtcpClient) -> Result<()> {
     };
     let base_path = PathBuf::from(path);
     println!("  ▶️ Text -> {}", base_path.display());
-    let provider = TextProvider::new("text_demo".into(), Some(base_path.clone()), None);
-    let provider = Arc::new(provider);
-    let tools = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "text",
+            "name": "text_demo",
+            "base_path": base_path
+        }]
+    }))
+    .await?;
+    let tools = client.search_tools("", 10).await?;
     println!("    tools: {}", tools.len());
 
     let mut args = HashMap::new();
@@ -284,15 +328,20 @@ async fn demo_text(client: &UtcpClient) -> Result<()> {
     Ok(())
 }
 
-async fn demo_webrtc(client: &UtcpClient) -> Result<()> {
+async fn demo_webrtc() -> Result<()> {
     let Some(sig) = env("DEMO_WEBRTC_SIGNALING") else {
         println!("  ▫️ WebRTC: set DEMO_WEBRTC_SIGNALING to run (transport currently a stub)");
         return Ok(());
     };
     println!("  ▶️ WebRTC -> {sig}");
-    let provider = WebRtcProvider::new("webrtc_demo".into(), None);
-    let provider = Arc::new(provider);
-    let _ = client.register_tool_provider(provider.clone()).await?;
+    let client = common::client_from_providers(json!({
+        "providers": [{
+            "provider_type": "webrtc",
+            "name": "webrtc_demo",
+            "signaling_server": sig
+        }]
+    }))
+    .await?;
 
     let mut args = HashMap::new();
     args.insert("message".into(), json!("hello p2p"));
