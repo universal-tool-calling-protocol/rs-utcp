@@ -153,7 +153,7 @@ impl UtcpClient {
         Ok(client)
     }
 
-    fn call_name_for_provider(tool_name: &str, provider_type: ProviderType) -> String {
+    fn call_name_for_provider(tool_name: &str, provider_type: &ProviderType) -> String {
         match provider_type {
             ProviderType::Mcp | ProviderType::Text => tool_name
                 .splitn(2, '.')
@@ -172,14 +172,18 @@ impl UtcpClient {
             }
         }
 
-        let parts: Vec<&str> = tool_name.splitn(2, '.').collect();
-        if parts.len() != 2 {
+        let (provider_name, _tool_suffix) = tool_name.split_once('.').ok_or_else(|| {
+            anyhow!(
+                "Invalid tool name format. Expected 'provider.tool', got: {}",
+                tool_name
+            )
+        })?;
+        if provider_name.is_empty() {
             return Err(anyhow!(
                 "Invalid tool name format. Expected 'provider.tool', got: {}",
                 tool_name
             ));
         }
-        let provider_name = parts[0];
 
         let prov = self
             .tool_repository
@@ -195,7 +199,7 @@ impl UtcpClient {
             .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?
             .clone();
 
-        let call_name = Self::call_name_for_provider(tool_name, provider_type.clone());
+        let call_name = Self::call_name_for_provider(tool_name, &provider_type);
         let resolved = ResolvedTool {
             provider: prov.clone(),
             transport: transport.clone(),
@@ -259,7 +263,7 @@ impl UtcpClientInterface for UtcpClient {
         {
             let mut resolved = self.resolved_tools_cache.write().await;
             for tool in &normalized_tools {
-                let call_name = Self::call_name_for_provider(&tool.name, provider_type.clone());
+                let call_name = Self::call_name_for_provider(&tool.name, &provider_type);
                 resolved.insert(
                     tool.name.clone(),
                     ResolvedTool {
