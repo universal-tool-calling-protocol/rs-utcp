@@ -50,14 +50,16 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. Load your providers (or define them in code)
+    // v1.0: Configuration uses 'manual_call_templates' instead of 'providers'
     let config = UtcpClientConfig::new().with_providers_file("examples/providers.json".into());
     
     // 2. Set up the repo and search strategy
     let repo = Arc::new(InMemoryToolRepository::new());
     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
     
-    // 3. Create the client
-    let client = UtcpClient::new(config, repo, search).await?;
+    // 3. Create the client using the async factory method (v1.0)
+    // Use UtcpClient::create() or UtcpClient::new()
+    let client = UtcpClient::create(config, repo, search).await?;
 
     // 4. Find and use tools!
     let tools = client.search_tools("echo", 10).await?;
@@ -66,6 +68,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
+**Migration from v0.1 to v1.0**: If you're upgrading from v0.1, see the [UTCP Migration Guide](https://www.utcp.io/migration-v0.1-to-v1.0). The library includes built-in migration helpers that automatically convert v0.1 configuration formats to v1.0.
 
 ## Supported Transports
 

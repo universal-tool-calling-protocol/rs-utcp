@@ -11,17 +11,17 @@ use std::sync::Arc;
 async fn main() -> anyhow::Result<()> {
     println!("🚀 Loading UTCP Client from providers.json\n");
 
-    // Create configuration with providers file
+    // Create configuration with providers file (supports both v0.1 and v1.0 formats)
     let config = UtcpClientConfig::new()
-        .with_providers_file(PathBuf::from("examples/providers.json"))
+        .with_manual_path(PathBuf::from("examples/providers.json"))
         .with_variable("API_KEY".to_string(), "my-secret-api-key".to_string());
 
     // Create repository and search strategy
     let repo = Arc::new(InMemoryToolRepository::new());
     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
 
-    // Create client and auto-load providers from JSON
-    let client = UtcpClient::new(config, repo, search).await?;
+    // Create client using v1.0 async factory method and auto-load providers from JSON
+    let client = UtcpClient::create(config, repo, search).await?;
 
     println!("\n📋 Listing all available tools:");
     match client.search_tools("", 100).await {
