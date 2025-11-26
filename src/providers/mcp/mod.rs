@@ -82,3 +82,45 @@ impl McpProvider {
         self.url.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_mcp_provider_http_deserialization() {
+        let json = json!({
+            "name": "test-mcp-http",
+            "provider_type": "mcp",
+            "url": "http://localhost:3000/mcp"
+        });
+
+        let provider: McpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-mcp-http");
+        assert_eq!(provider.url.as_deref(), Some("http://localhost:3000/mcp"));
+        assert!(provider.is_http());
+        assert!(!provider.is_stdio());
+    }
+
+    #[test]
+    fn test_mcp_provider_stdio_deserialization() {
+        let json = json!({
+            "name": "test-mcp-stdio",
+            "provider_type": "mcp",
+            "command": "python",
+            "args": ["server.py"],
+            "env_vars": {
+                "DEBUG": "1"
+            }
+        });
+
+        let provider: McpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-mcp-stdio");
+        assert_eq!(provider.command.as_deref(), Some("python"));
+        assert_eq!(provider.args.as_ref().unwrap()[0], "server.py");
+        assert_eq!(provider.env_vars.as_ref().unwrap().get("DEBUG").map(|s| s.as_str()), Some("1"));
+        assert!(provider.is_stdio());
+        assert!(!provider.is_http());
+    }
+}

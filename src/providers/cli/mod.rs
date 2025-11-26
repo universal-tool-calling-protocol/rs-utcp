@@ -43,3 +43,36 @@ impl CliProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn deserializes_cli_provider_with_minimal_config() {
+        let json = json!({
+            "name": "test-cli",
+            "provider_type": "cli",
+            "command_name": "echo"
+        });
+
+        let provider: CliProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-cli");
+        assert_eq!(provider.command_name, "echo");
+        assert!(provider.working_dir.is_none());
+        assert!(provider.env_vars.is_none());
+        assert_eq!(provider.type_(), ProviderType::Cli);
+    }
+
+    #[test]
+    fn cli_provider_new_sets_defaults() {
+        let provider = CliProvider::new("builder".to_string(), "make".to_string(), None);
+
+        assert_eq!(provider.base.name, "builder");
+        assert_eq!(provider.base.provider_type, ProviderType::Cli);
+        assert_eq!(provider.command_name, "make");
+        assert!(provider.working_dir.is_none());
+        assert!(provider.env_vars.is_none());
+    }
+}

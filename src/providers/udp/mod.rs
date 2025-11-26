@@ -41,3 +41,47 @@ impl UdpProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn udp_provider_defaults_timeout_to_none_when_not_provided() {
+        let json = json!({
+            "name": "test-udp",
+            "provider_type": "udp",
+            "host": "127.0.0.1",
+            "port": 8081
+        });
+
+        let provider: UdpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-udp");
+        assert_eq!(provider.host, "127.0.0.1");
+        assert_eq!(provider.port, 8081);
+        assert_eq!(provider.timeout_ms, None);
+    }
+
+    #[test]
+    fn udp_provider_respects_configured_timeout() {
+        let json = json!({
+            "name": "test-udp-timeout",
+            "provider_type": "udp",
+            "host": "localhost",
+            "port": 9001,
+            "timeout_ms": 7000
+        });
+
+        let provider: UdpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.timeout_ms, Some(7000));
+    }
+
+    #[test]
+    fn udp_provider_new_sets_default_timeout() {
+        let provider = UdpProvider::new("new-udp".to_string(), "localhost".to_string(), 53, None);
+
+        assert_eq!(provider.base.provider_type, ProviderType::Udp);
+        assert_eq!(provider.timeout_ms, Some(30_000));
+    }
+}

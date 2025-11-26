@@ -51,3 +51,43 @@ impl HttpProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_http_provider_deserialization() {
+        let json = json!({
+            "name": "test-http",
+            "provider_type": "http",
+            "url": "http://example.com",
+            "http_method": "POST"
+        });
+
+        let provider: HttpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-http");
+        assert_eq!(provider.url, "http://example.com");
+        assert_eq!(provider.http_method, "POST");
+        assert!(provider.content_type.is_none()); // Defaults are handled in new(), but serde doesn't use new() unless default impl exists
+    }
+
+    #[test]
+    fn test_http_provider_full_config() {
+        let json = json!({
+            "name": "test-http-full",
+            "provider_type": "http",
+            "url": "http://example.com/api",
+            "http_method": "GET",
+            "content_type": "application/xml",
+            "headers": {
+                "X-Custom": "value"
+            }
+        });
+
+        let provider: HttpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.content_type.as_deref(), Some("application/xml"));
+        assert_eq!(provider.headers.unwrap().get("X-Custom").map(|s| s.as_str()), Some("value"));
+    }
+}

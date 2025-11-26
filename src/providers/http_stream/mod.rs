@@ -47,3 +47,57 @@ impl StreamableHttpProvider {
         "POST".to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn streamable_http_provider_defaults_to_post() {
+        let json = json!({
+            "name": "test-http-stream",
+            "provider_type": "http_stream",
+            "url": "https://example.com/stream"
+        });
+
+        let provider: StreamableHttpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-http-stream");
+        assert_eq!(provider.http_method, "POST");
+        assert!(provider.headers.is_none());
+    }
+
+    #[test]
+    fn streamable_http_provider_accepts_method_and_headers() {
+        let json = json!({
+            "name": "test-http-stream-full",
+            "provider_type": "http_stream",
+            "url": "https://example.com/stream",
+            "http_method": "PUT",
+            "headers": {
+                "Authorization": "Bearer token"
+            }
+        });
+
+        let provider: StreamableHttpProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.http_method, "PUT");
+        assert_eq!(
+            provider
+                .headers
+                .unwrap()
+                .get("Authorization")
+                .map(|s| s.as_str()),
+            Some("Bearer token")
+        );
+    }
+
+    #[test]
+    fn streamable_http_provider_new_sets_defaults() {
+        let provider =
+            StreamableHttpProvider::new("new-http-stream".to_string(), "https://example.com".to_string(), None);
+
+        assert_eq!(provider.base.provider_type, ProviderType::HttpStream);
+        assert_eq!(provider.http_method, "POST");
+        assert!(provider.headers.is_none());
+    }
+}

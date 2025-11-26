@@ -397,10 +397,86 @@ impl ClientTransport for WebRtcTransport {
             Box::pin(async move {
                 let parsed = serde_json::from_slice::<Value>(&msg.data)
                     .map_err(|e| anyhow!("Failed to parse stream item: {}", e));
-                let _ = tx.send(parsed).await;
             })
         }));
 
         Ok(boxed_channel_stream(rx, None))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+
+    #[test]
+    fn test_default_schema() {
+        let schema = WebRtcTransport::default_schema();
+        assert_eq!(schema.type_, "object");
+        assert!(schema.properties.is_none());
+    }
+
+    #[test]
+    fn test_apply_auth_api_key_header() {
+        let transport = WebRtcTransport::new();
+        let auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "X-API-Key".to_string(),
+            location: "header".to_string(),
+        });
+
+        let builder = reqwest::Client::new().get("http://example.com");
+        let builder = transport.apply_auth(builder, &auth).unwrap();
+        let request = builder.build().unwrap();
+
+        assert_eq!(
+            request.headers().get("X-API-Key").unwrap().to_str().unwrap(),
+            "secret"
+        );
+    }
+
+    #[test]
+    fn test_apply_auth_api_key_query() {
+        let transport = WebRtcTransport::new();
+        let auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "key".to_string(),
+            location: "query".to_string(),
+        });
+
+        let builder = reqwest::Client::new().get("http://example.com");
+        let builder = transport.apply_auth(builder, &auth).unwrap();
+        let request = builder.build().unwrap();
+
+        assert_eq!(request.url().query(), Some("key=secret"));
+    }
+
+    #[test]
+    fn test_apply_auth_basic() {
+        let transport = WebRtcTransport::new();
+        let auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+
+        let builder = reqwest::Client::new().get("http://example.com");
+        let builder = transport.apply_auth(builder, &auth).unwrap();
+        let request = builder.build().unwrap();
+
+        // Basic auth header is "Basic <base64(user:pass)>"
+        // user:pass -> dXNlcjpwYXNz
+        assert_eq!(
+            request.headers().get("Authorization").unwrap().to_str().unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+    }
+
+    #[test]
+    fn test_transport_implements_trait() {
+        fn assert_client_transport<T: ClientTransport>() {}
+        assert_client_transport::<WebRtcTransport>();
     }
 }

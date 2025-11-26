@@ -88,3 +88,57 @@ impl WebRtcProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_webrtc_provider_defaults() {
+        let json = json!({
+            "name": "test-webrtc",
+            "provider_type": "webrtc",
+            "signaling_server": "http://localhost:8080"
+        });
+
+        let provider: WebRtcProvider = serde_json::from_value(json).unwrap();
+
+        assert_eq!(provider.base.name, "test-webrtc");
+        assert_eq!(provider.signaling_server, "http://localhost:8080");
+        assert_eq!(provider.channel_label, "utcp-data");
+        assert!(provider.ordered);
+        assert_eq!(provider.ice_servers.len(), 1);
+        assert_eq!(provider.ice_servers[0].urls[0], "stun:stun.l.google.com:19302");
+    }
+
+    #[test]
+    fn test_webrtc_provider_full_config() {
+        let json = json!({
+            "name": "test-webrtc-full",
+            "provider_type": "webrtc",
+            "signaling_server": "wss://signal.example.com",
+            "ice_servers": [
+                {
+                    "urls": ["turn:turn.example.com"],
+                    "username": "user",
+                    "credential": "pass"
+                }
+            ],
+            "channel_label": "custom-label",
+            "ordered": false,
+            "max_packet_life_time": 100,
+            "max_retransmits": 5
+        });
+
+        let provider: WebRtcProvider = serde_json::from_value(json).unwrap();
+
+        assert_eq!(provider.signaling_server, "wss://signal.example.com");
+        assert_eq!(provider.ice_servers.len(), 1);
+        assert_eq!(provider.ice_servers[0].username.as_deref(), Some("user"));
+        assert_eq!(provider.channel_label, "custom-label");
+        assert!(!provider.ordered);
+        assert_eq!(provider.max_packet_life_time, Some(100));
+        assert_eq!(provider.max_retransmits, Some(5));
+    }
+}

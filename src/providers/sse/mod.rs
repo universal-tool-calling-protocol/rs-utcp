@@ -47,3 +47,64 @@ impl SseProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn sse_provider_deserializes_minimal_config() {
+        let json = json!({
+            "name": "test-sse",
+            "provider_type": "sse",
+            "url": "https://example.com/sse"
+        });
+
+        let provider: SseProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(provider.base.name, "test-sse");
+        assert_eq!(provider.url, "https://example.com/sse");
+        assert!(provider.headers.is_none());
+        assert!(provider.body_field.is_none());
+        assert!(provider.header_fields.is_none());
+    }
+
+    #[test]
+    fn sse_provider_accepts_headers_and_fields() {
+        let json = json!({
+            "name": "test-sse-full",
+            "provider_type": "sse",
+            "url": "https://example.com/stream",
+            "headers": {
+                "Authorization": "Bearer token"
+            },
+            "body_field": "data",
+            "header_fields": ["Content-Type", "X-Trace-Id"]
+        });
+
+        let provider: SseProvider = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            provider
+                .headers
+                .unwrap()
+                .get("Authorization")
+                .map(|s| s.as_str()),
+            Some("Bearer token")
+        );
+        assert_eq!(provider.body_field.as_deref(), Some("data"));
+        assert_eq!(
+            provider.header_fields.as_ref().unwrap(),
+            &vec!["Content-Type".to_string(), "X-Trace-Id".to_string()]
+        );
+    }
+
+    #[test]
+    fn sse_provider_new_sets_defaults() {
+        let provider = SseProvider::new("new-sse".to_string(), "http://localhost:8080/sse".to_string(), None);
+
+        assert_eq!(provider.base.provider_type, ProviderType::Sse);
+        assert!(provider.headers.is_none());
+        assert!(provider.body_field.is_none());
+        assert!(provider.header_fields.is_none());
+    }
+}
