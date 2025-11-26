@@ -19,6 +19,19 @@ impl CliTransport {
         Self
     }
 
+    fn parse_command(&self, command_name: &str) -> Result<(String, Vec<String>)> {
+        let parts: Vec<String> = command_name
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+
+        if parts.is_empty() {
+            return Err(anyhow!("Empty command name"));
+        }
+
+        Ok((parts[0].clone(), parts[1..].to_vec()))
+    }
+
     async fn execute_command(
         &self,
         cmd_path: &str,
@@ -55,10 +68,10 @@ impl CliTransport {
 
         // Write stdin if provided
         if let Some(input) = stdin_input {
-            if let Some(mut stdin) = child.stdin.take() {
-                stdin.write_all(input.as_bytes()).await?;
-                drop(stdin); // Close stdin
-            }
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(input.as_bytes()).await?;
+            drop(stdin); // Close stdin
+        }
         }
 
         // Wait for completion with timeout
@@ -141,27 +154,12 @@ impl ClientTransport for CliTransport {
             .ok_or_else(|| anyhow!("Provider is not a CliProvider"))?;
 
         // Parse command name into command and args
-        let parts: Vec<String> = cli_prov
-            .command_name
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
-
-        if parts.is_empty() {
-            return Err(anyhow!("Empty command name"));
-        }
-
-        let cmd_path = &parts[0];
-        let cmd_args = if parts.len() > 1 {
-            parts[1..].to_vec()
-        } else {
-            Vec::new()
-        };
+        let (cmd_path, cmd_args) = self.parse_command(&cli_prov.command_name)?;
 
         // Execute discovery command
         let (stdout, stderr, exit_code) = self
             .execute_command(
-                cmd_path,
+                &cmd_path,
                 &cmd_args,
                 &cli_prov.env_vars,
                 &cli_prov.working_dir,
@@ -195,24 +193,14 @@ impl ClientTransport for CliTransport {
             .ok_or_else(|| anyhow!("Provider is not a CliProvider"))?;
 
         // Parse command name
-        let parts: Vec<String> = cli_prov
-            .command_name
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
-
-        if parts.is_empty() {
-            return Err(anyhow!("Empty command name"));
-        }
-
-        let cmd_path = &parts[0];
+        let (cmd_path, mut cmd_args) = self.parse_command(&cli_prov.command_name)?;
 
         // Build command: <cmd> call <provider> <tool> [--flags]
-        let mut cmd_args = vec![
+        cmd_args.extend([
             "call".to_string(),
             cli_prov.base.name.clone(),
             tool_name.to_string(),
-        ];
+        ]);
         cmd_args.extend(self.format_arguments(&args));
 
         // Prepare JSON input
@@ -221,7 +209,7 @@ impl ClientTransport for CliTransport {
         // Execute command
         let (stdout, stderr, exit_code) = self
             .execute_command(
-                cmd_path,
+                &cmd_path,
                 &cmd_args,
                 &cli_prov.env_vars,
                 &cli_prov.working_dir,
@@ -350,6 +338,50 @@ if (mode === "call") {
         script_path
     }
 
+    fn write_cli_requiring_mode_flag(dir: &std::path::Path) -> std::path::PathBuf {
+        let script_path = dir.join("mock_cli_mode_flag.js");
+        let script = r#"#!/usr/bin/env node
+const argv = process.argv.slice(2);
+const hasFlag = argv.shift() === "--cli-mode";
+if (!hasFlag) {
+  console.error("missing --cli-mode");
+  process.exit(2);
+}
+
+const [mode, provider, tool, ...flags] = argv;
+if (!mode) {
+  console.log(JSON.stringify({
+    tools: [{
+      name: "echo",
+      description: "echo tool",
+      inputs: { "type": "object" },
+      outputs: { "type": "object" },
+      tags: []
+    }]
+  }));
+  process.exit(0);
+}
+
+if (mode === "call") {
+  let body = "";
+  process.stdin.on("data", chunk => body += chunk.toString());
+  process.stdin.on("end", () => {
+    const args = body ? JSON.parse(body) : {};
+    console.log(JSON.stringify({ provider, tool, args, flags, hadFlag: hasFlag }));
+  });
+}
+"#;
+        fs::write(&script_path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script_path, perms).unwrap();
+        }
+        script_path
+    }
+
     fn cli_provider(command: &str) -> CliProvider {
         CliProvider {
             base: BaseProvider {
@@ -394,6 +426,29 @@ if (mode === "call") {
         assert_eq!(result["provider"], "cli");
         assert_eq!(result["tool"], "echo");
         assert_eq!(result["args"], json!(args));
+    }
+
+    #[tokio::test]
+    async fn call_tool_respects_base_command_args() {
+        let dir = tempdir().unwrap();
+        let script_path = write_cli_requiring_mode_flag(dir.path());
+        let command = format!("{} --cli-mode", script_path.display());
+
+        let transport = CliTransport::new();
+        let provider = cli_provider(&command);
+
+        let tools = transport
+            .register_tool_provider(&provider)
+            .await
+            .expect("register tools");
+        assert_eq!(tools.len(), 1);
+
+        let result = transport
+            .call_tool("echo", HashMap::new(), &provider)
+            .await
+            .expect("call tool");
+
+        assert_eq!(result["hadFlag"], json!(true));
     }
 
     #[tokio::test]
