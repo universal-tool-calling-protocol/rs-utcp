@@ -43,13 +43,16 @@ async fn main() -> anyhow::Result<()> {
 
     match client.register_tool_provider(http_provider.clone()).await {
         Ok(tools) => {
-            println!("  ✓ Registered HTTP MCP provider with {} tools", tools.len());
-            
+            println!(
+                "  ✓ Registered HTTP MCP provider with {} tools",
+                tools.len()
+            );
+
             // Try to stream results from a tool
             if let Some(tool) = tools.first() {
                 let mut args = HashMap::new();
                 args.insert("query".to_string(), serde_json::json!("test"));
-                
+
                 println!("  → Streaming results from tool: {}", tool.name);
                 match client.call_tool_stream(&tool.name, args).await {
                     Ok(mut stream) => {
@@ -76,13 +79,16 @@ async fn main() -> anyhow::Result<()> {
 
     match client.register_tool_provider(stdio_provider.clone()).await {
         Ok(tools) => {
-            println!("  ✓ Registered stdio MCP provider with {} tools", tools.len());
-            
+            println!(
+                "  ✓ Registered stdio MCP provider with {} tools",
+                tools.len()
+            );
+
             // Try to stream results from the 'add' tool
             let mut args = HashMap::new();
             args.insert("a".to_string(), serde_json::json!(10));
             args.insert("b".to_string(), serde_json::json!(20));
-            
+
             println!("  → Streaming results from tool: stdio_mcp.add");
             match client.call_tool_stream("stdio_mcp.add", args).await {
                 Ok(mut stream) => {
@@ -117,7 +123,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             .unwrap());
     }
 
-    let accept_header = req.headers().get("Accept").and_then(|h| h.to_str().ok()).unwrap_or("");
+    let accept_header = req
+        .headers()
+        .get("Accept")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
     let is_sse = accept_header.contains("text/event-stream");
 
     let body = hyper::body::to_bytes(req.into_body())
@@ -145,10 +155,10 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             if is_sse {
                 // Return SSE stream
                 let (mut tx, body) = Body::channel();
-                
+
                 tokio::spawn(async move {
                     let messages = vec!["Hello", "from", "SSE", "stream!"];
-                    
+
                     for msg in messages {
                         let data = json!({
                             "type": "chunk",
@@ -160,7 +170,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                         }
                         sleep(Duration::from_millis(200)).await;
                     }
-                    
+
                     // Send final event if needed, or just close
                     // For this demo, we'll just close the stream
                 });

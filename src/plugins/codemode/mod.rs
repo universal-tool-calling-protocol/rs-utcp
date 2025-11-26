@@ -164,7 +164,7 @@ impl CodeModeUtcp {
 
 #[async_trait::async_trait]
 pub trait LlmModel: Send + Sync {
-    async fn complete(&self, prompt: &str) -> Result<String>;
+    async fn complete(&self, prompt: &str) -> Result<Value>;
 }
 
 /// High-level orchestrator that mirrors go-utcp's CodeMode flow:
@@ -241,8 +241,13 @@ impl CodemodeOrchestrator {
             "You can call tools described below. Respond with only 'yes' or 'no'.\n\nTOOLS:\n{}\n\nUSER:\n{}",
             specs, prompt
         );
-        let resp = self.model.complete(&request).await?;
-        Ok(resp.trim_start().to_ascii_lowercase().starts_with('y'))
+        let resp_val = self.model.complete(&request).await?;
+        Ok(resp_val
+            .as_str()
+            .unwrap_or_default()
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with('y'))
     }
 
     async fn select_tools(&self, prompt: &str, specs: &str) -> Result<Vec<String>> {
@@ -250,7 +255,7 @@ impl CodemodeOrchestrator {
             "Choose relevant tool names from the list. Respond with a comma-separated list of names only.\n\nTOOLS:\n{}\n\nUSER:\n{}",
             specs, prompt
         );
-        let resp = self.model.complete(&request).await?;
+        let resp = self.model.complete(&request).await?.as_str().unwrap_or_default();
         let mut out = Vec::new();
         for name in resp.split(',') {
             let n = name.trim();
@@ -274,8 +279,8 @@ Use helpers: call_tool(name, map), call_tool_stream(name, map), search_tools(que
 Do not add imports. End by producing a value (the snippet return value). \
 Use exact field names from the schemas. The tools available:\n{specs}\n\nUSER:\n{prompt}"
         );
-        let resp = self.model.complete(&request).await?;
-        Ok(resp.trim().to_string())
+        let resp_val = self.model.complete(&request).await?;
+        Ok(resp_val.as_str().unwrap_or_default().trim().to_string())
     }
 }
 
