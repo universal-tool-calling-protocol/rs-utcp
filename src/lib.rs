@@ -27,6 +27,7 @@ use crate::providers::http::HttpProvider;
 use crate::repository::ToolRepository;
 use crate::tools::{Tool, ToolSearchStrategy};
 use crate::transports::stream::StreamResult;
+use crate::transports::registry::TransportRegistry;
 use crate::transports::ClientTransport;
 
 #[async_trait]
@@ -54,7 +55,7 @@ pub trait UtcpClientInterface: Send + Sync {
 
 pub struct UtcpClient {
     config: UtcpClientConfig,
-    transports: HashMap<String, Arc<dyn ClientTransport>>,
+    transports: TransportRegistry,
     tool_repository: Arc<dyn ToolRepository>,
     search_strategy: Arc<dyn ToolSearchStrategy>,
 
@@ -85,57 +86,7 @@ impl UtcpClient {
         repo: Arc<dyn ToolRepository>,
         strat: Arc<dyn ToolSearchStrategy>,
     ) -> Result<Self> {
-        let mut transports: HashMap<String, Arc<dyn ClientTransport>> = HashMap::new();
-
-        // Initialize all default transports
-        transports.insert(
-            "http".to_string(),
-            Arc::new(crate::transports::http::HttpClientTransport::new()),
-        );
-        transports.insert(
-            "cli".to_string(),
-            Arc::new(crate::transports::cli::CliTransport::new()),
-        );
-        transports.insert(
-            "websocket".to_string(),
-            Arc::new(crate::transports::websocket::WebSocketTransport::new()),
-        );
-        transports.insert(
-            "grpc".to_string(),
-            Arc::new(crate::transports::grpc::GrpcTransport::new()),
-        );
-        transports.insert(
-            "graphql".to_string(),
-            Arc::new(crate::transports::graphql::GraphQLTransport::new()),
-        );
-        transports.insert(
-            "tcp".to_string(),
-            Arc::new(crate::transports::tcp::TcpTransport::new()),
-        );
-        transports.insert(
-            "udp".to_string(),
-            Arc::new(crate::transports::udp::UdpTransport::new()),
-        );
-        transports.insert(
-            "sse".to_string(),
-            Arc::new(crate::transports::sse::SseTransport::new()),
-        );
-        transports.insert(
-            "mcp".to_string(),
-            Arc::new(crate::transports::mcp::McpTransport::new()),
-        );
-        transports.insert(
-            "webrtc".to_string(),
-            Arc::new(crate::transports::webrtc::WebRtcTransport::new()),
-        );
-        transports.insert(
-            "http_stream".to_string(),
-            Arc::new(crate::transports::http_stream::StreamableHttpTransport::new()),
-        );
-        transports.insert(
-            "text".to_string(),
-            Arc::new(crate::transports::text::TextTransport::new()),
-        );
+        let transports = TransportRegistry::with_default_transports();
 
         let client = Self {
             config,
@@ -209,15 +160,15 @@ impl UtcpClient {
                 .ok_or_else(|| UtcpError::ToolNotFound(provider_name.to_string()))?;
             let provider_type = prov.type_();
 
-            let transport_key = provider_type.as_key().to_string();
-            let transport = self
-                .transports
-                .get(&transport_key)
-                .ok_or_else(|| {
-                    UtcpError::Config(format!(
-                        "No transport found for provider type: {:?}",
-                        provider_type
-                    ))
+        let transport_key = provider_type.as_key().to_string();
+        let transport = self
+            .transports
+            .get(&transport_key)
+            .ok_or_else(|| {
+                UtcpError::Config(format!(
+                    "No transport found for provider type: {:?}",
+                    provider_type
+                ))
                 })?
                 .clone();
 
@@ -432,7 +383,7 @@ impl UtcpClientInterface for UtcpClient {
     }
 
     fn get_transports(&self) -> HashMap<String, Arc<dyn ClientTransport>> {
-        self.transports.clone()
+        self.transports.as_map()
     }
 
     async fn call_tool_stream(

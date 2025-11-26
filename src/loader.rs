@@ -262,6 +262,9 @@ fn call_template_to_provider(mut template: Value) -> Result<Value> {
         if let Some(method) = obj.remove("method").or_else(|| obj.remove("http_method")) {
             obj.insert("http_method".to_string(), method);
         }
+        if !obj.contains_key("http_method") {
+            obj.insert("http_method".to_string(), Value::String("GET".to_string()));
+        }
         if let Some(body_field) = obj.remove("body_field") {
             obj.insert("body_field".to_string(), body_field);
         }
@@ -270,6 +273,9 @@ fn call_template_to_provider(mut template: Value) -> Result<Value> {
         }
         if let Some(url) = obj.remove("url") {
             obj.insert("url".to_string(), url);
+        }
+        if !obj.contains_key("url") {
+            obj.insert("url".to_string(), Value::String("http://localhost".to_string()));
         }
     }
 
