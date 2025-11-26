@@ -58,11 +58,12 @@ struct ResolvedTool {
 }
 
 impl UtcpClient {
-    pub fn new(
+    /// Create a new UtcpClient and automatically load providers from the JSON file specified in config
+    pub async fn new(
         config: UtcpClientConfig,
         repo: Arc<dyn ToolRepository>,
         strat: Arc<dyn ToolSearchStrategy>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut transports: HashMap<String, Arc<dyn ClientTransport>> = HashMap::new();
 
         // Initialize all default transports
@@ -115,23 +116,14 @@ impl UtcpClient {
             Arc::new(crate::transports::text::TextTransport::new()),
         );
 
-        Self {
+        let client = Self {
             config,
             transports,
             tool_repository: repo,
             search_strategy: strat,
             provider_tools_cache: RwLock::new(HashMap::new()),
             resolved_tools_cache: RwLock::new(HashMap::new()),
-        }
-    }
-
-    /// Create a new UtcpClient and automatically load providers from the JSON file specified in config
-    pub async fn new_with_providers(
-        config: UtcpClientConfig,
-        repo: Arc<dyn ToolRepository>,
-        strat: Arc<dyn ToolSearchStrategy>,
-    ) -> Result<Self> {
-        let client = Self::new(config, repo, strat);
+        };
 
         // Load providers if file path is specified
         if let Some(providers_path) = &client.config.providers_file_path {
