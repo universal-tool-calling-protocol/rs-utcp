@@ -37,6 +37,3 @@ jobs:
 
       - name: Run tests
         run: cargo test --all --verbose
-
-      - name: Check examples
-        run: cargo check --examples --verbose
