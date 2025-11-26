@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
 
 We support a lot of protocols out of the box. Some are more mature than others, but here's the list:
 
-*   **HTTP** (The most battle-tested)
+*   **HTTP** (UTCP manifest or OpenAPI spec auto-converted on discovery)
 *   **MCP** (Model Context Protocol - supports both stdio and SSE!)
 *   **WebSocket**
 *   **gRPC**
@@ -103,6 +103,12 @@ You can run the evaluator demo to play with this:
 ```bash
 cargo run --example codemode_eval
 ```
+
+And if you want a full LLM-in-the-loop orchestration, there's a Gemini-backed example:
+```bash
+GEMINI_API_KEY=your_key_here cargo run --example orchestrator_gemini -- "Echo hello back to me"
+```
+By default it targets `gemini-pro`; override with `GEMINI_MODEL` if you prefer.
 
 ## Status
 
