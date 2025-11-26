@@ -10,7 +10,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 
 /// Create a UTCP client by writing the provided provider JSON to a temp file and
-/// loading it through `new_with_providers`.
+/// loading it through `new`.
 pub async fn client_from_providers(providers: Value) -> Result<Arc<UtcpClient>> {
     client_from_providers_with_config(providers, UtcpClientConfig::default()).await
 }
@@ -27,6 +27,6 @@ pub async fn client_from_providers_with_config(
     fs::write(providers_file.path(), serde_json::to_vec(&providers)?)?;
     let config = config.with_providers_file(providers_file.path().to_path_buf());
 
-    let client = UtcpClient::new_with_providers(config, repo, search).await?;
+    let client = UtcpClient::new(config, repo, search).await?;
     Ok(Arc::new(client))
 }

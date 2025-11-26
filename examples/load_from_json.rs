@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
 
     // Create client and auto-load providers from JSON
-    let client = UtcpClient::new_with_providers(config, repo, search).await?;
+    let client = UtcpClient::new(config, repo, search).await?;
 
     println!("\n📋 Listing all available tools:");
     match client.search_tools("", 100).await {

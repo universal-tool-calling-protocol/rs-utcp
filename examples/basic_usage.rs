@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_demo_server().await?;
     println!("Started demo HTTP provider at http://{addr}/tools");
 
-    // Load providers via new_with_providers using a temp JSON file.
+    // Load providers via new using a temp JSON file.
     let client = common::client_from_providers(json!({
         "providers": [{
             "provider_type": "http",
@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
     .await?;
 
     println!("✓ UTCP Client initialized with all transports");
-    println!("  Providers loaded from temporary config via new_with_providers\n");
+    println!("  Providers loaded from temporary config via new\n");
 
     // Example 1: List available tools
     println!("📡 Example 1: Listing provider tools");
