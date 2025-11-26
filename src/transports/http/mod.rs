@@ -17,8 +17,17 @@ pub struct HttpClientTransport {
 
 impl HttpClientTransport {
     pub fn new() -> Self {
+        // Optimized HTTP client with connection pooling and compression
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(60)) // Increased timeout for better reliability
+            .pool_max_idle_per_host(100) // Connection pool optimization
+            .pool_idle_timeout(Some(Duration::from_secs(90))) // Keep connections alive longer
+            .tcp_keepalive(Some(Duration::from_secs(30))) // TCP keep-alive
+            .gzip(true) // Enable gzip compression
+            .http2_adaptive_window(true) // HTTP/2 flow control optimization
+            .http2_keep_alive_interval(Some(Duration::from_secs(10))) // HTTP/2 keep-alive
+            .http2_keep_alive_timeout(Duration::from_secs(20))
+            .http2_keep_alive_while_idle(true)
             .build()
             .expect("Failed to build HTTP client");
 
