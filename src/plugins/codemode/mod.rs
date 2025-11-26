@@ -111,6 +111,46 @@ impl CodeModeUtcp {
 
         let client = self.client.clone();
         engine.register_fn(
+            "call_tool_stream",
+            move |name: &str, map: Map| -> Result<Dynamic, Box<EvalAltResult>> {
+                let args_val = serde_json::to_value(map).map_err(|e| {
+                    EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                })?;
+                let args = value_to_map(args_val)?;
+
+                let mut stream = block_on_any_runtime(async {
+                    client.call_tool_stream(name, args).await
+                })
+                .map_err(|e| {
+                    EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                })?;
+
+                let mut items = Vec::new();
+                loop {
+                    let next = block_on_any_runtime(async { stream.next().await }).map_err(|e| {
+                        EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                    })?;
+                    match next {
+                        Some(value) => items.push(value),
+                        None => break,
+                    }
+                }
+
+                if let Err(e) = block_on_any_runtime(async { stream.close().await }) {
+                    return Err(
+                        EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                            .into(),
+                    );
+                }
+
+                Ok(rhai::serde::to_dynamic(items).map_err(|e| {
+                    EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                })?)
+            },
+        );
+
+        let client = self.client.clone();
+        engine.register_fn(
             "search_tools",
             move |query: &str, limit: i64| -> Result<Dynamic, Box<EvalAltResult>> {
                 let res = block_on_any_runtime(async {
@@ -226,9 +266,55 @@ impl CodemodeOrchestrator {
             .search_tools("", 200)
             .await
             .unwrap_or_default();
-        let mut rendered = String::new();
+        let mut rendered =
+            String::from("UTCP TOOL REFERENCE (use exact field names and required keys):\n");
         for tool in tools {
-            rendered.push_str(&format!("- {}: {}\n", tool.name, tool.description));
+            rendered.push_str(&format!("TOOL: {} - {}\n", tool.name, tool.description));
+
+            rendered.push_str("INPUTS:\n");
+            match tool.inputs.properties.as_ref() {
+                Some(props) if !props.is_empty() => {
+                    for (key, schema) in props {
+                        rendered.push_str(&format!(
+                            "  - {}: {}\n",
+                            key,
+                            schema_type_hint(schema)
+                        ));
+                    }
+                }
+                _ => rendered.push_str("  - none\n"),
+            }
+
+            if let Some(required) = tool.inputs.required.as_ref() {
+                if !required.is_empty() {
+                    rendered.push_str("  REQUIRED:\n");
+                    for field in required {
+                        rendered.push_str(&format!("  - {}\n", field));
+                    }
+                }
+            }
+
+            rendered.push_str("OUTPUTS:\n");
+            match tool.outputs.properties.as_ref() {
+                Some(props) if !props.is_empty() => {
+                    for (key, schema) in props {
+                        rendered.push_str(&format!(
+                            "  - {}: {}\n",
+                            key,
+                            schema_type_hint(schema)
+                        ));
+                    }
+                }
+                _ => {
+                    if !tool.outputs.type_.is_empty() {
+                        rendered.push_str(&format!("  - type: {}\n", tool.outputs.type_));
+                    } else {
+                        rendered.push_str("  - (shape unspecified)\n");
+                    }
+                }
+            }
+
+            rendered.push('\n');
         }
 
         let mut cache = self.tool_specs_cache.write().await;
@@ -275,10 +361,14 @@ impl CodemodeOrchestrator {
     ) -> Result<String> {
         let tool_list = tools.join(", ");
         let request = format!(
-            "Write a Rhai snippet that uses ONLY these tools: {tool_list}.\n\
-Use helpers: call_tool(name, map), call_tool_stream(name, map), search_tools(query, limit), sprintf(fmt, list).\n\
-Do not add imports. End by producing a value (the snippet return value). \
-Use exact field names from the schemas. The tools available:\n{specs}\n\nUSER:\n{prompt}"
+            "Generate a Rhai snippet that chains UTCP tool calls to satisfy the user request.\n\
+Use ONLY these tools: {tool_list}.\n\
+Helpers available: call_tool(name, map), call_tool_stream(name, map) -> array of streamed chunks, search_tools(query, limit), sprintf(fmt, list).\n\
+Use Rhai map syntax #{{\"field\": value}} with exact input field names; include required fields and never invent new keys.\n\
+You may call multiple tools, store results in variables, and pass them into subsequent tools.\n\
+When using call_tool_stream, treat the returned array as the streamed items and chain it into later calls or the final output.\n\
+Return the final value as the last expression (map/list/scalar). No markdown or commentary, code only.\n\
+\nUSER:\n{prompt}\n\nTOOLS (use exact field names):\n{specs}"
         );
         let resp_val = self.model.complete(&request).await?;
         Ok(resp_val.as_str().unwrap_or_default().trim().to_string())
@@ -299,6 +389,20 @@ pub struct CodeModeResult {
     pub stdout: String,
     #[serde(default)]
     pub stderr: String,
+}
+
+fn schema_type_hint(value: &Value) -> String {
+    if let Some(t) = value.get("type").and_then(|v| v.as_str()) {
+        t.to_string()
+    } else if let Some(s) = value.as_str() {
+        s.to_string()
+    } else if value.is_array() {
+        "array".to_string()
+    } else if value.is_object() {
+        "object".to_string()
+    } else {
+        "any".to_string()
+    }
 }
 
 fn value_to_map(value: Value) -> Result<HashMap<String, Value>, Box<EvalAltResult>> {
@@ -429,5 +533,23 @@ mod tests {
         };
         let res = codemode.execute(args).await.unwrap();
         assert_eq!(res.value, serde_json::json!(10));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn execute_collects_stream_results() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client.clone());
+
+        let code = r#"let chunks = call_tool_stream("demo.tool", #{}); chunks"#;
+        let args = CodeModeArgs {
+            code: code.into(),
+            timeout: Some(1_000),
+        };
+        let res = codemode.execute(args).await.unwrap();
+        assert_eq!(res.value, serde_json::json!(["chunk"]));
+        let calls = client.called.lock().await.clone();
+        assert_eq!(calls, vec!["stream:demo.tool"]);
     }
 }
