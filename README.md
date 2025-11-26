@@ -79,7 +79,7 @@ We support a lot of protocols out of the box. Some are more mature than others, 
 *   **GraphQL**
 *   **TCP / UDP**
 *   **SSE** (Server-Sent Events)
-*   **WebRTC** (Experimental)
+*   **WebRTC** (Peer-to-peer data channels with signaling)
 
 Check out the `examples/` folder for a working server/client demo of almost every transport.
 
@@ -114,6 +114,7 @@ By default it targets `gemini-pro`; override with `GEMINI_MODEL` if you prefer.
 
 *   **HTTP**: Solid and feature-complete.
 *   **MCP**: Working well (stdio & SSE).
+*   **WebRTC**: Fully implemented with signaling and streaming support.
 *   **Others**: Mostly functional skeletons. They work for the happy path, but might need some hardening.
 
 If you find a bug or want to add a new transport, PRs are super welcome!
