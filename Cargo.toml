@@ -30,6 +30,7 @@ prost-types = "0.12"
 base64 = "0.21"
 bytes = "1"
 rhai = { version = "1.18", features = ["serde"] }
+eventsource-stream = "0.2"
 
 [build-dependencies]
 tonic-build = "0.11"

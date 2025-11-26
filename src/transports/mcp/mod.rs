@@ -229,6 +229,171 @@ impl McpTransport {
             ))
         }
     }
+
+    async fn mcp_http_stream(
+        &self,
+        prov: &McpProvider,
+        params: Value,
+    ) -> Result<Box<dyn StreamResult>> {
+        use eventsource_stream::Eventsource;
+        use futures::StreamExt;
+
+        let url = prov
+            .url
+            .as_ref()
+            .ok_or_else(|| anyhow!("No URL provided for HTTP MCP provider"))?;
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": params,
+            "id": 1,
+        });
+
+        let mut req = self.client.post(url).json(&request);
+        
+        // Add headers
+        if let Some(headers) = &prov.headers {
+            for (k, v) in headers {
+                req = req.header(k, v);
+            }
+        }
+        
+        // Add authentication
+        if let Some(auth) = &prov.base.auth {
+            req = self.apply_auth(req, auth)?;
+        }
+
+        // Set Accept header for SSE
+        req = req.header("Accept", "text/event-stream");
+
+        let response = req.send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("MCP stream request failed: {}", response.status()));
+        }
+
+        // Create a channel to stream results
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+
+        // Spawn a task to read SSE events
+        tokio::spawn(async move {
+            let byte_stream = response.bytes_stream();
+            let mut event_stream = byte_stream.eventsource();
+
+            while let Some(event_result) = event_stream.next().await {
+                match event_result {
+                    Ok(event) => {
+                        // Parse the event data as JSON
+                        match serde_json::from_str::<Value>(&event.data) {
+                            Ok(value) => {
+                                if tx.send(Ok(value)).await.is_err() {
+                                    break; // Receiver dropped
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(anyhow!("Failed to parse SSE event: {}", e))).await;
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(anyhow!("SSE stream error: {}", e))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(crate::transports::stream::boxed_channel_stream(rx, None))
+    }
+
+    async fn mcp_stdio_stream(
+        &self,
+        prov: &McpProvider,
+        params: Value,
+    ) -> Result<Box<dyn StreamResult>> {
+        let process = self.get_or_create_stdio_process(prov).await?;
+
+        // Generate request ID
+        let mut id_guard = process.request_id.lock().await;
+        let id = *id_guard;
+        *id_guard += 1;
+        drop(id_guard);
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": params,
+            "id": id,
+        });
+
+        let request_str = serde_json::to_string(&request)?;
+
+        // Write request to stdin
+        let mut stdin = process.stdin.lock().await;
+        stdin.write_all(request_str.as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+        stdin.flush().await?;
+        drop(stdin);
+
+        // Create a channel to stream results
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+
+        // Clone Arc for the task
+        let stdout = Arc::clone(&process.stdout);
+
+        // Spawn a task to read streaming responses
+        tokio::spawn(async move {
+            let mut stdout_guard = stdout.lock().await;
+            
+            loop {
+                let mut line = String::new();
+                match stdout_guard.read_line(&mut line).await {
+                    Ok(0) => break, // EOF
+                    Ok(_) => {
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+
+                        // Parse the JSON-RPC response
+                        match serde_json::from_str::<Value>(&line) {
+                            Ok(response) => {
+                                // Check if this is an error response
+                                if let Some(error) = response.get("error") {
+                                    let _ = tx.send(Err(anyhow!("MCP error: {}", error))).await;
+                                    break;
+                                }
+
+                                // Check if this is the final result or a stream chunk
+                                if let Some(result) = response.get("result") {
+                                    // Send the result
+                                    if tx.send(Ok(result.clone())).await.is_err() {
+                                        break; // Receiver dropped
+                                    }
+
+                                    // Check if this is marked as the final response
+                                    if response.get("final").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(anyhow!("Failed to parse response: {}", e))).await;
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(anyhow!("Failed to read from stdout: {}", e))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(crate::transports::stream::boxed_channel_stream(rx, None))
+    }
 }
 
 #[async_trait]
@@ -296,12 +461,30 @@ impl ClientTransport for McpTransport {
 
     async fn call_tool_stream(
         &self,
-        _tool_name: &str,
-        _args: HashMap<String, Value>,
-        _prov: &dyn Provider,
+        tool_name: &str,
+        args: HashMap<String, Value>,
+        prov: &dyn Provider,
     ) -> Result<Box<dyn StreamResult>> {
-        // MCP can support streaming via Server-Sent Events or WebSocket
-        Err(anyhow!("MCP streaming requires SSE or WebSocket transport"))
+        let mcp_prov = prov
+            .as_any()
+            .downcast_ref::<McpProvider>()
+            .ok_or_else(|| anyhow!("Provider is not an McpProvider"))?;
+
+        // MCP tool call format
+        let params = serde_json::json!({
+            "name": tool_name,
+            "arguments": args,
+        });
+
+        if mcp_prov.is_http() {
+            self.mcp_http_stream(mcp_prov, params).await
+        } else if mcp_prov.is_stdio() {
+            self.mcp_stdio_stream(mcp_prov, params).await
+        } else {
+            Err(anyhow!(
+                "MCP provider must have either 'url' (HTTP) or 'command' (stdio)"
+            ))
+        }
     }
 }
 

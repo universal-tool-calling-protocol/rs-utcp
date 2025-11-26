@@ -132,7 +132,8 @@ def handle_tools_call(request_id, params):
                 "result": result,
                 "tool": tool_name,
                 "arguments": arguments
-            }
+            },
+            "final": True
         }
     except Exception as e:
         return {
