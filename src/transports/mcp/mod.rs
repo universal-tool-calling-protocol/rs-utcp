@@ -508,6 +508,10 @@ mod tests {
     use super::*;
     use crate::auth::{ApiKeyAuth, AuthType};
     use crate::providers::base::{BaseProvider, ProviderType};
+    use axum::{extract::Json, http::HeaderValue, routing::post, Router};
+    use bytes::Bytes;
+    use serde_json::json;
+    use std::net::TcpListener;
 
     #[test]
     fn apply_auth_adds_expected_headers() {
@@ -551,5 +555,124 @@ mod tests {
         assert!(err
             .to_string()
             .contains("MCP provider must have either 'url' (HTTP) or 'command' (stdio)"));
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_mcp_http_transport() {
+        async fn handler(
+            headers: axum::http::HeaderMap,
+            Json(payload): Json<Value>,
+        ) -> Json<Value> {
+            if headers
+                .get(axum::http::header::ACCEPT)
+                .and_then(|v| v.to_str().ok())
+                == Some("text/event-stream")
+            {
+                // Should never hit JSON handler for stream; placeholder
+                return Json(json!({ "error": "wrong handler" }));
+            }
+
+            let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("");
+            match method {
+                "tools/list" => Json(json!({
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "tools": [{
+                            "name": "echo",
+                            "description": "echo tool",
+                            "inputs": { "type": "object" },
+                            "outputs": { "type": "object" },
+                            "tags": []
+                        }]
+                    },
+                    "id": 1
+                })),
+                "tools/call" => {
+                    let params = payload.get("params").cloned().unwrap_or_default();
+                    Json(json!({
+                        "jsonrpc": "2.0",
+                        "result": { "called": params },
+                        "id": 1
+                    }))
+                }
+                _ => Json(json!({ "jsonrpc": "2.0", "result": {}, "id": 1 })),
+            }
+        }
+
+        async fn stream_handler(
+            headers: axum::http::HeaderMap,
+            Json(_payload): Json<Value>,
+        ) -> impl axum::response::IntoResponse {
+            assert_eq!(
+                headers.get(axum::http::header::ACCEPT),
+                Some(&HeaderValue::from_static("text/event-stream"))
+            );
+
+            let stream = tokio_stream::iter(vec![
+                Ok::<_, std::convert::Infallible>(Bytes::from_static(
+                    b"data: {\"idx\":1}\n\n",
+                )),
+                Ok(Bytes::from_static(b"data: {\"idx\":2}\n\n")),
+            ]);
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                axum::body::boxed(axum::body::Body::wrap_stream(stream)),
+            )
+        }
+
+        let app = Router::new()
+            .route("/", post(handler))
+            .route("/stream", post(stream_handler));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let prov = McpProvider {
+            base: BaseProvider {
+                name: "mcp".to_string(),
+                provider_type: ProviderType::Mcp,
+                auth: None,
+            },
+            url: Some(format!("http://{}", addr)),
+            headers: None,
+            command: None,
+            args: None,
+            env_vars: None,
+        };
+
+        let transport = McpTransport::new();
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "echo");
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hi".into()));
+        let call_value = transport
+            .call_tool("echo", args.clone(), &prov)
+            .await
+            .expect("call");
+        assert_eq!(call_value, json!({ "called": { "name": "echo", "arguments": json!(args) } }));
+
+        // Stream uses /stream endpoint
+        let stream_prov = McpProvider {
+            url: Some(format!("http://{}/stream", addr)),
+            ..prov.clone()
+        };
+        let mut stream = transport
+            .call_tool_stream("echo", args, &stream_prov)
+            .await
+            .expect("stream");
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":1}));
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":2}));
+        stream.close().await.unwrap();
     }
 }

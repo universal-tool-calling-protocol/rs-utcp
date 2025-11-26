@@ -247,6 +247,10 @@ impl ClientTransport for SseTransport {
 mod tests {
     use super::*;
     use crate::providers::base::{BaseProvider, ProviderType};
+    use axum::{body::Body, extract::Json, http::Response, routing::get, routing::post, Router};
+    use bytes::Bytes;
+    use serde_json::json;
+    use std::net::TcpListener;
 
     #[test]
     fn build_payload_respects_body_field() {
@@ -325,5 +329,84 @@ mod tests {
         let tools = transport.parse_tools_from_body(&body);
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "stream-tool");
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_sse_transport() {
+        async fn manifest() -> Json<Value> {
+            Json(json!({
+                "tools": [{
+                    "name": "tool1",
+                    "description": "sse tool",
+                    "inputs": { "type": "object" },
+                    "outputs": { "type": "object" },
+                    "tags": []
+                }]
+            }))
+        }
+
+        async fn sse_handler(Json(_payload): Json<Value>) -> Response<Body> {
+            let stream = tokio_stream::iter(vec![
+                Ok::<Bytes, std::convert::Infallible>(Bytes::from_static(
+                    b"data: {\"idx\":1}\n\n",
+                )),
+                Ok(Bytes::from_static(b"data: {\"idx\":2}\n\n")),
+            ]);
+
+            Response::builder()
+                .header("content-type", "text/event-stream")
+                .body(Body::wrap_stream(stream))
+                .unwrap()
+        }
+
+        let app = Router::new()
+            .route("/", get(manifest))
+            .route("/tool1", post(sse_handler));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let prov = SseProvider {
+            base: BaseProvider {
+                name: "sse".to_string(),
+                provider_type: ProviderType::Sse,
+                auth: None,
+            },
+            url: format!("http://{}", addr),
+            headers: None,
+            body_field: None,
+            header_fields: None,
+        };
+
+        let transport = SseTransport::new();
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "tool1");
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hello".into()));
+
+        let value = transport
+            .call_tool("tool1", args.clone(), &prov)
+            .await
+            .expect("call");
+        assert_eq!(value, json!([json!({"idx":1}), json!({"idx":2})]));
+
+        let mut stream = transport
+            .call_tool_stream("tool1", args, &prov)
+            .await
+            .expect("stream");
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":1}));
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":2}));
+        stream.close().await.unwrap();
     }
 }

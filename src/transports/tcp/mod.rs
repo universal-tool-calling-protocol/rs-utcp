@@ -130,4 +130,32 @@ mod tests {
 
         assert_eq!(result.get("echo"), Some(&json!(args)));
     }
+
+    #[tokio::test]
+    async fn register_returns_empty_and_stream_not_supported() {
+        let prov = TcpProvider {
+            base: BaseProvider {
+                name: "tcp".to_string(),
+                provider_type: ProviderType::Tcp,
+                auth: None,
+            },
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            timeout_ms: None,
+        };
+
+        let transport = TcpTransport::new();
+        assert!(transport
+            .register_tool_provider(&prov)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let err = transport
+            .call_tool_stream("tool", HashMap::new(), &prov)
+            .await
+            .err()
+            .expect("stream error");
+        assert!(err.to_string().contains("not fully implemented"));
+    }
 }

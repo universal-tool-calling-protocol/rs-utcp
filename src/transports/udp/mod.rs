@@ -135,4 +135,32 @@ mod tests {
         assert_eq!(result.get("received_tool"), Some(&json!("echo")));
         assert_eq!(result.get("args"), Some(&json!(args)));
     }
+
+    #[tokio::test]
+    async fn register_returns_empty_and_stream_error() {
+        let prov = UdpProvider {
+            base: BaseProvider {
+                name: "udp".to_string(),
+                provider_type: ProviderType::Udp,
+                auth: None,
+            },
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            timeout_ms: None,
+        };
+
+        let transport = UdpTransport::new();
+        assert!(transport
+            .register_tool_provider(&prov)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let err = transport
+            .call_tool_stream("tool", HashMap::new(), &prov)
+            .await
+            .err()
+            .expect("stream error");
+        assert!(err.to_string().contains("Streaming not suitable for UDP"));
+    }
 }

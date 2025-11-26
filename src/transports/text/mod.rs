@@ -141,6 +141,8 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
+    use serde_json::json;
+    use std::fs as stdfs;
 
     #[tokio::test]
     async fn test_text_transport_call_tool() {
@@ -207,5 +209,54 @@ mod tests {
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
+    }
+
+    #[tokio::test]
+    async fn register_and_call_stream_errors() {
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path().to_path_buf();
+
+        // Write tools.json
+        let tools_manifest = json!({
+            "tools": [{
+                "name": "sample",
+                "description": "sample tool",
+                "inputs": { "type": "object" },
+                "outputs": { "type": "object" },
+                "tags": []
+            }]
+        });
+        stdfs::write(base_path.join("tools.json"), tools_manifest.to_string()).unwrap();
+
+        // Write script
+        let script_path = base_path.join("sample.js");
+        stdfs::write(
+            &script_path,
+            r#"const args = JSON.parse(process.argv[2]); console.log(JSON.stringify({ ok: args.value }));"#,
+        )
+        .unwrap();
+
+        let transport = TextTransport::new().with_base_path(base_path.clone());
+        let tools = transport
+            .register_tool_provider(&MockProvider)
+            .await
+            .expect("register");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "sample");
+
+        let mut args = HashMap::new();
+        args.insert("value".to_string(), Value::String("v".to_string()));
+        let result = transport
+            .call_tool("sample", args.clone(), &MockProvider)
+            .await
+            .expect("call");
+        assert_eq!(result, json!({ "ok": "v" }));
+
+        let err = transport
+            .call_tool_stream("sample", args, &MockProvider)
+            .await
+            .err()
+            .expect("stream error");
+        assert!(err.to_string().contains("Streaming not supported"));
     }
 }

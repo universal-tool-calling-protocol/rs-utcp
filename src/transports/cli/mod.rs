@@ -257,7 +257,11 @@ impl ClientTransport for CliTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use crate::providers::cli::CliProvider;
     use serde_json::json;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn format_arguments_handles_types_and_ordering() {
@@ -307,5 +311,104 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "example");
         assert_eq!(tools[0].description, "example tool");
+    }
+
+    fn write_mock_cli(dir: &std::path::Path) -> std::path::PathBuf {
+        let script_path = dir.join("mock_cli.js");
+        let script = r#"#!/usr/bin/env node
+const [,, mode, provider, tool, ...flags] = process.argv;
+if (!mode) {
+  console.log(JSON.stringify({
+    tools: [{
+      name: "echo",
+      description: "echo tool",
+      inputs: { "type": "object" },
+      outputs: { "type": "object" },
+      tags: []
+    }]
+  }));
+  process.exit(0);
+}
+
+if (mode === "call") {
+  let body = "";
+  process.stdin.on("data", chunk => body += chunk.toString());
+  process.stdin.on("end", () => {
+    const args = body ? JSON.parse(body) : {};
+    console.log(JSON.stringify({ provider, tool, args, flags }));
+  });
+}
+"#;
+        fs::write(&script_path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script_path, perms).unwrap();
+        }
+        script_path
+    }
+
+    fn cli_provider(command: &str) -> CliProvider {
+        CliProvider {
+            base: BaseProvider {
+                name: "cli".to_string(),
+                provider_type: ProviderType::Cli,
+                auth: None,
+            },
+            command_name: command.to_string(),
+            working_dir: None,
+            env_vars: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn register_and_call_tool_via_cli_transport() {
+        let dir = tempdir().unwrap();
+        let script_path = write_mock_cli(dir.path());
+        let command = script_path.display().to_string();
+
+        let transport = CliTransport::new();
+        let provider = cli_provider(&command);
+
+        let tools = transport
+            .register_tool_provider(&provider)
+            .await
+            .expect("register tools");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "echo");
+
+        let mut args = HashMap::new();
+        args.insert("name".into(), Value::String("world".into()));
+        let result = transport
+            .call_tool("echo", args.clone(), &provider)
+            .await
+            .expect("call tool");
+
+        assert!(
+            result.get("provider").is_some(),
+            "result missing provider: {}",
+            result
+        );
+        assert_eq!(result["provider"], "cli");
+        assert_eq!(result["tool"], "echo");
+        assert_eq!(result["args"], json!(args));
+    }
+
+    #[tokio::test]
+    async fn call_tool_stream_not_supported() {
+        let dir = tempdir().unwrap();
+        let script_path = write_mock_cli(dir.path());
+        let command = format!("node {}", script_path.display());
+        let transport = CliTransport::new();
+        let provider = cli_provider(&command);
+
+        let err = transport
+            .call_tool_stream("echo", HashMap::new(), &provider)
+            .await
+            .err()
+            .expect("expected streaming error");
+        assert!(err.to_string().contains("Streaming not supported"));
     }
 }
