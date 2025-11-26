@@ -255,7 +255,8 @@ impl CodemodeOrchestrator {
             "Choose relevant tool names from the list. Respond with a comma-separated list of names only.\n\nTOOLS:\n{}\n\nUSER:\n{}",
             specs, prompt
         );
-        let resp = self.model.complete(&request).await?;
+        let resp_val = self.model.complete(&request).await?;
+        let resp = resp_val.as_str().unwrap_or_default();
         let mut out = Vec::new();
         for name in resp.split(',') {
             let n = name.trim();
