@@ -3,6 +3,7 @@ pub mod config;
 pub mod grpcpb;
 pub mod loader;
 pub mod plugins;
+pub mod openapi;
 pub mod providers;
 pub mod repository;
 pub mod tag;
@@ -16,7 +17,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::UtcpClientConfig;
+use crate::openapi::OpenApiConverter;
 use crate::providers::base::{Provider, ProviderType};
+use crate::providers::http::HttpProvider;
 use crate::repository::ToolRepository;
 use crate::tools::{Tool, ToolSearchStrategy};
 use crate::transports::stream::StreamResult;
@@ -230,7 +233,27 @@ impl UtcpClientInterface for UtcpClient {
             .clone();
 
         // Register with transport
-        let tools = transport.register_tool_provider(prov.as_ref()).await?;
+        let tools = if provider_type == ProviderType::Http {
+            if let Some(http_prov) = prov.as_any().downcast_ref::<HttpProvider>() {
+                match OpenApiConverter::new_from_url(&http_prov.url, Some(provider_name.clone()))
+                    .await
+                {
+                    Ok(converter) => {
+                        let manual = converter.convert();
+                        if manual.tools.is_empty() {
+                            transport.register_tool_provider(prov.as_ref()).await?
+                        } else {
+                            manual.tools
+                        }
+                    }
+                    Err(_) => transport.register_tool_provider(prov.as_ref()).await?,
+                }
+            } else {
+                transport.register_tool_provider(prov.as_ref()).await?
+            }
+        } else {
+            transport.register_tool_provider(prov.as_ref()).await?
+        };
 
         // Normalize tool names (prefix with provider name)
         let mut normalized_tools = Vec::new();
