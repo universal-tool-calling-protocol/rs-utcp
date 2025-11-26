@@ -30,8 +30,8 @@ async fn main() -> Result<()> {
     let echo_url = format!("http://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "http",
+        "manual_call_templates": [{
+            "call_template_type": "http",
             "name": "http_demo",
             "url": echo_url,
             "http_method": "POST"

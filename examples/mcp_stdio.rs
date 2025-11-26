@@ -18,8 +18,8 @@ async fn main() -> anyhow::Result<()> {
     // Uncomment this if you have a real MCP server installed
     /*
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "mcp",
+        "manual_call_templates": [{
+            "call_template_type": "mcp",
             "name": "filesystem",
             "command": "node",
             "args": ["/path/to/mcp-server/index.js"],
@@ -35,8 +35,8 @@ async fn main() -> anyhow::Result<()> {
     // First, run: python examples/mcp_stdio_server.py
     println!("📡 Creating UTCP client with MCP stdio provider");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "mcp",
+        "manual_call_templates": [{
+            "call_template_type": "mcp",
             "name": "calculator",
             "command": "python3",
             "args": ["examples/mcp_stdio_server.py"]

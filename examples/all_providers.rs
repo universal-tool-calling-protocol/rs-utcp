@@ -73,8 +73,8 @@ async fn demo_http() -> Result<()> {
 
     println!("  ▶️ HTTP -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "http",
+        "manual_call_templates": [{
+            "call_template_type": "http",
             "name": "http_demo",
             "url": url,
             "http_method": "POST"
@@ -96,10 +96,10 @@ async fn demo_cli() -> Result<()> {
     };
     println!("  ▶️ CLI -> {cmd}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "cli",
+        "manual_call_templates": [{
+            "call_template_type": "cli",
             "name": "cli_demo",
-            "command_name": cmd
+            "command": cmd
         }]
     }))
     .await?;
@@ -118,8 +118,8 @@ async fn demo_websocket() -> Result<()> {
     };
     println!("  ▶️ WebSocket -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "websocket",
+        "manual_call_templates": [{
+            "call_template_type": "websocket",
             "name": "ws_demo",
             "url": url
         }]
@@ -140,8 +140,8 @@ async fn demo_graphql() -> Result<()> {
     };
     println!("  ▶️ GraphQL -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "graphql",
+        "manual_call_templates": [{
+            "call_template_type": "graphql",
             "name": "graphql_demo",
             "url": url
         }]
@@ -163,8 +163,8 @@ async fn demo_grpc() -> Result<()> {
     let port: u16 = port.parse().unwrap_or(50051);
     println!("  ▶️ gRPC -> {host}:{port}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "grpc",
+        "manual_call_templates": [{
+            "call_template_type": "grpc",
             "name": "grpc_demo",
             "host": host,
             "port": port
@@ -187,8 +187,8 @@ async fn demo_tcp() -> Result<()> {
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ TCP -> {addr}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "tcp",
+        "manual_call_templates": [{
+            "call_template_type": "tcp",
             "name": "tcp_demo",
             "host": host,
             "port": port
@@ -211,8 +211,8 @@ async fn demo_udp() -> Result<()> {
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ UDP -> {addr}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "udp",
+        "manual_call_templates": [{
+            "call_template_type": "udp",
             "name": "udp_demo",
             "host": host,
             "port": port
@@ -234,8 +234,8 @@ async fn demo_sse() -> Result<()> {
     };
     println!("  ▶️ SSE -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "sse",
+        "manual_call_templates": [{
+            "call_template_type": "sse",
             "name": "sse_demo",
             "url": url
         }]
@@ -258,8 +258,8 @@ async fn demo_http_stream() -> Result<()> {
     };
     println!("  ▶️ HTTP Stream -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "http_stream",
+        "manual_call_templates": [{
+            "call_template_type": "http_stream",
             "name": "http_stream_demo",
             "url": url
         }]
@@ -284,8 +284,8 @@ async fn demo_mcp() -> Result<()> {
     };
     println!("  ▶️ MCP -> {url}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "mcp",
+        "manual_call_templates": [{
+            "call_template_type": "mcp",
             "name": "mcp_demo",
             "url": url
         }]
@@ -311,8 +311,8 @@ async fn demo_text() -> Result<()> {
     let base_path = PathBuf::from(path);
     println!("  ▶️ Text -> {}", base_path.display());
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "text",
+        "manual_call_templates": [{
+            "call_template_type": "text",
             "name": "text_demo",
             "base_path": base_path
         }]
@@ -335,8 +335,8 @@ async fn demo_webrtc() -> Result<()> {
     };
     println!("  ▶️ WebRTC -> {sig}");
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "webrtc",
+        "manual_call_templates": [{
+            "call_template_type": "webrtc",
             "name": "webrtc_demo",
             "signaling_server": sig
         }]

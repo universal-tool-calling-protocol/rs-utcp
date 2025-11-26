@@ -1,7 +1,7 @@
 {
-    "providers": [
+    "manual_call_templates": [
         {
-            "provider_type": "http",
+            "call_template_type": "http",
             "name": "weather_api",
             "url": "https://api.weather.example.com/tools",
             "http_method": "GET",
@@ -10,13 +10,13 @@
             }
         },
         {
-            "provider_type": "cli",
+            "call_template_type": "cli",
             "name": "git_tools",
-            "command_name": "git",
+            "command": "git",
             "working_dir": "/path/to/repo"
         },
         {
-            "provider_type": "http",
+            "call_template_type": "http",
             "name": "api_with_auth",
             "url": "https://api.example.com/utcp",
             "http_method": "GET",
@@ -26,6 +26,12 @@
                 "var_name": "X-API-Key",
                 "location": "header"
             }
+        }
+    ],
+    "load_variables_from": [
+        {
+            "variable_loader_type": "dotenv",
+            "env_file_path": ".env"
         }
     ]
 }

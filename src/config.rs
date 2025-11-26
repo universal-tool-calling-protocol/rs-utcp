@@ -47,6 +47,12 @@ impl UtcpClientConfig {
         self
     }
 
+    /// v1.0-style helper to set manual/call template path (reuses providers_file_path).
+    pub fn with_manual_path(mut self, path: PathBuf) -> Self {
+        self.providers_file_path = Some(path);
+        self
+    }
+
     pub async fn get_variable(&self, key: &str) -> Option<String> {
         // Check inline variables first
         if let Some(val) = self.variables.get(key) {
