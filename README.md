@@ -83,6 +83,22 @@ We support a lot of protocols out of the box. Some are more mature than others, 
 
 Check out the `examples/` folder for a working server/client demo of almost every transport.
 
+### WebRTC Usage
+
+WebRTC requires a signaling server to establish the initial connection. We've provided a complete example of both a tool provider (server) and a client.
+
+1. **Start the WebRTC Server** (Signaling + Tool Provider):
+   ```bash
+   cargo run --example webrtc_server
+   ```
+   This starts a signaling server on `127.0.0.1:8080` and exposes tools like `echo` and `stream_numbers`.
+
+2. **Run the Client**:
+   ```bash
+   cargo run --example webrtc_example
+   ```
+   This connects to the server, discovers the tools, and executes them (including streaming!).
+
 ## Codemode & Orchestration
 
 If you want to get fancy, you can use "Codemode". It allows you to execute Rhai scripts that have access to your registered tools.
