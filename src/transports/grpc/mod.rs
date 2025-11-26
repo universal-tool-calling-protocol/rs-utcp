@@ -183,3 +183,169 @@ impl ClientTransport for GrpcTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use serde_json::json;
+    use tokio::net::TcpListener;
+    use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
+    use tonic::transport::Server;
+
+    use crate::grpcpb::generated::utcp_service_server::{UtcpService, UtcpServiceServer};
+    use crate::grpcpb::generated::{Manual, Tool as GrpcTool, ToolCallResponse};
+
+    #[test]
+    fn apply_auth_sets_basic_header() {
+        let transport = GrpcTransport::new();
+        let prov = GrpcProvider::new(
+            "grpc".to_string(),
+            "localhost".to_string(),
+            50051,
+            Some(AuthConfig::Basic(BasicAuth {
+                auth_type: AuthType::Basic,
+                username: "user".to_string(),
+                password: "pass".to_string(),
+            })),
+        );
+
+        let mut request: Request<()> = Request::new(());
+        transport.apply_auth(&prov, &mut request).unwrap();
+
+        let header = request.metadata().get("authorization").unwrap();
+        assert_eq!(header.to_str().unwrap(), "Basic dXNlcjpwYXNz");
+    }
+
+    #[test]
+    fn apply_auth_rejects_non_basic() {
+        let transport = GrpcTransport::new();
+        let prov = GrpcProvider::new(
+            "grpc".to_string(),
+            "localhost".to_string(),
+            50051,
+            Some(AuthConfig::ApiKey(ApiKeyAuth {
+                auth_type: AuthType::ApiKey,
+                api_key: "secret".to_string(),
+                var_name: "X-Api-Key".to_string(),
+                location: "header".to_string(),
+            })),
+        );
+
+        let mut request: Request<()> = Request::new(());
+        let err = transport.apply_auth(&prov, &mut request).unwrap_err();
+        assert!(err.to_string().contains("Only basic auth is supported"));
+    }
+
+    #[derive(Default)]
+    struct MockGrpc;
+
+    #[tonic::async_trait]
+    impl UtcpService for MockGrpc {
+        async fn get_manual(
+            &self,
+            _request: Request<Empty>,
+        ) -> Result<tonic::Response<Manual>, tonic::Status> {
+            Ok(tonic::Response::new(Manual {
+                version: "1.0".to_string(),
+                tools: vec![GrpcTool {
+                    name: "echo".to_string(),
+                    description: "echo tool".to_string(),
+                }],
+            }))
+        }
+
+        async fn call_tool(
+            &self,
+            request: Request<ToolCallRequest>,
+        ) -> Result<tonic::Response<ToolCallResponse>, tonic::Status> {
+            let inner = request.into_inner();
+            let args_value: Value =
+                serde_json::from_str(&inner.args_json).unwrap_or_else(|_| Value::Null);
+            Ok(tonic::Response::new(ToolCallResponse {
+                result_json: json!({
+                    "tool": inner.tool,
+                    "args": args_value
+                })
+                .to_string(),
+            }))
+        }
+
+        type CallToolStreamStream = ReceiverStream<Result<ToolCallResponse, tonic::Status>>;
+
+        async fn call_tool_stream(
+            &self,
+            _request: Request<ToolCallRequest>,
+        ) -> Result<tonic::Response<Self::CallToolStreamStream>, tonic::Status> {
+            let (tx, rx) = tokio::sync::mpsc::channel(4);
+            tx.send(Ok(ToolCallResponse {
+                result_json: json!({ "idx": 1 }).to_string(),
+            }))
+            .await
+            .unwrap();
+            tx.send(Ok(ToolCallResponse {
+                result_json: json!({ "idx": 2 }).to_string(),
+            }))
+            .await
+            .unwrap();
+            Ok(tonic::Response::new(ReceiverStream::new(rx)))
+        }
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_over_grpc() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let incoming = TcpListenerStream::new(listener);
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(UtcpServiceServer::new(MockGrpc::default()))
+                .serve_with_incoming_shutdown(incoming, async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .unwrap();
+        });
+
+        let prov = GrpcProvider {
+            base: BaseProvider {
+                name: "grpc".to_string(),
+                provider_type: ProviderType::Grpc,
+                auth: None,
+            },
+            host: addr.ip().to_string(),
+            port: addr.port(),
+            use_ssl: false,
+        };
+
+        let transport = GrpcTransport::new();
+
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "echo");
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hi".into()));
+        let call_value = transport
+            .call_tool("echo", args.clone(), &prov)
+            .await
+            .expect("call");
+        assert_eq!(call_value, json!({ "tool": "echo", "args": json!(args) }));
+
+        let mut stream = transport
+            .call_tool_stream("echo", args, &prov)
+            .await
+            .expect("call stream");
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 1 }));
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 2 }));
+        stream.close().await.unwrap();
+
+        let _ = shutdown_tx.send(());
+    }
+}

@@ -83,3 +83,84 @@ impl ClientTransport for UdpTransport {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use serde_json::json;
+    use tokio::net::UdpSocket;
+
+    #[tokio::test]
+    async fn call_tool_sends_and_receives_datagram() {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = socket.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 1024];
+            let (len, peer) = socket.recv_from(&mut buf).await.unwrap();
+            let incoming: Value = serde_json::from_slice(&buf[..len]).unwrap();
+            let response = serde_json::to_vec(&json!({
+                "received_tool": incoming.get("tool").cloned().unwrap(),
+                "args": incoming.get("args").cloned().unwrap()
+            }))
+            .unwrap();
+            UdpSocket::bind("0.0.0.0:0")
+                .await
+                .unwrap()
+                .send_to(&response, peer)
+                .await
+                .unwrap();
+        });
+
+        let prov = UdpProvider {
+            base: BaseProvider {
+                name: "udp".to_string(),
+                provider_type: ProviderType::Udp,
+                auth: None,
+            },
+            host: addr.ip().to_string(),
+            port: addr.port(),
+            timeout_ms: None,
+        };
+
+        let mut args = HashMap::new();
+        args.insert("value".to_string(), Value::String("ping".to_string()));
+
+        let result = UdpTransport::new()
+            .call_tool("echo", args.clone(), &prov)
+            .await
+            .unwrap();
+
+        assert_eq!(result.get("received_tool"), Some(&json!("echo")));
+        assert_eq!(result.get("args"), Some(&json!(args)));
+    }
+
+    #[tokio::test]
+    async fn register_returns_empty_and_stream_error() {
+        let prov = UdpProvider {
+            base: BaseProvider {
+                name: "udp".to_string(),
+                provider_type: ProviderType::Udp,
+                auth: None,
+            },
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            timeout_ms: None,
+        };
+
+        let transport = UdpTransport::new();
+        assert!(transport
+            .register_tool_provider(&prov)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let err = transport
+            .call_tool_stream("tool", HashMap::new(), &prov)
+            .await
+            .err()
+            .expect("stream error");
+        assert!(err.to_string().contains("Streaming not suitable for UDP"));
+    }
+}

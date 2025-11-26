@@ -182,3 +182,155 @@ impl ClientTransport for StreamableHttpTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth, OAuth2Auth};
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use crate::providers::http_stream::StreamableHttpProvider;
+    use axum::{body::Body, extract::Json, http::Response, routing::post, Router};
+    use bytes::Bytes;
+    use serde_json::json;
+    use std::net::TcpListener;
+
+    #[test]
+    fn apply_auth_sets_expected_headers_and_query() {
+        let transport = StreamableHttpTransport::new();
+
+        let header_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "X-Stream-Key".to_string(),
+            location: "header".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &header_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(
+            request.headers().get("X-Stream-Key").unwrap(),
+            "secret"
+        );
+
+        let query_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "abc".to_string(),
+            var_name: "token".to_string(),
+            location: "query".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &query_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(request.url().query(), Some("token=abc"));
+
+        let basic_auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &basic_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(
+            request.headers().get(header::AUTHORIZATION).unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+    }
+
+    #[test]
+    fn apply_auth_rejects_oauth2() {
+        let transport = StreamableHttpTransport::new();
+        let auth = AuthConfig::OAuth2(OAuth2Auth {
+            auth_type: AuthType::OAuth2,
+            token_url: "https://auth.example.com/token".to_string(),
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            scope: None,
+        });
+
+        let err = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &auth)
+            .unwrap_err();
+        assert!(err.to_string().contains("OAuth2 auth is not yet supported"));
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_http_stream_transport() {
+        async fn aggregate(Json(payload): Json<Value>) -> Json<Value> {
+            Json(json!({ "received": payload }))
+        }
+
+        async fn stream(Json(_payload): Json<Value>) -> Response<Body> {
+            let chunks: Vec<Result<Bytes, std::convert::Infallible>> = vec![
+                Ok(Bytes::from_static(br#"{"chunk":1}"#)),
+                Ok(Bytes::from_static(br#"{"chunk":2}"#)),
+            ];
+            Response::builder()
+                .header("content-type", "application/json")
+                .body(Body::wrap_stream(tokio_stream::iter(chunks)))
+                .unwrap()
+        }
+
+        let app = Router::new()
+            .route("/aggregate", post(aggregate))
+            .route("/stream", post(stream));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let base_url = format!("http://{}", addr);
+        let provider = StreamableHttpProvider {
+            base: BaseProvider {
+                name: "http-stream".to_string(),
+                provider_type: ProviderType::HttpStream,
+                auth: None,
+            },
+            url: base_url.clone(),
+            http_method: "POST".to_string(),
+            headers: None,
+        };
+
+        let transport = StreamableHttpTransport::new();
+        let tools = transport
+            .register_tool_provider(&provider)
+            .await
+            .expect("register");
+        assert!(tools.is_empty());
+
+        let mut args = HashMap::new();
+        args.insert("payload".into(), Value::String("data".into()));
+
+        let aggregate_value = transport
+            .call_tool("aggregate", args.clone(), &provider)
+            .await
+            .expect("call tool");
+        assert_eq!(aggregate_value, json!({ "received": json!(args) }));
+
+        let mut stream = transport
+            .call_tool_stream("stream", args, &provider)
+            .await
+            .expect("call tool stream");
+        let mut items = Vec::new();
+        while let Some(item) = stream.next().await.unwrap() {
+            items.push(item);
+            if items.len() == 2 {
+                break;
+            }
+        }
+        stream.close().await.unwrap();
+
+        assert_eq!(items, vec![json!({"chunk": 1}), json!({"chunk": 2})]);
+    }
+}

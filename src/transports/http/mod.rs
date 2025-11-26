@@ -191,3 +191,172 @@ impl ClientTransport for HttpClientTransport {
         Err(anyhow!("Streaming not supported by HttpClientTransport"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth, OAuth2Auth};
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use crate::providers::http::HttpProvider;
+    use axum::{extract::Json, routing::get, routing::post, Router};
+    use serde_json::json;
+    use std::net::TcpListener;
+
+    #[test]
+    fn apply_auth_handles_api_key_locations() {
+        let transport = HttpClientTransport::new();
+
+        // Header location
+        let header_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "X-Key".to_string(),
+            location: "header".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &header_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(request.headers().get("X-Key").unwrap(), "secret");
+
+        // Query location
+        let query_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "key".to_string(),
+            location: "query".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &query_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(request.url().query(), Some("key=secret"));
+
+        // Cookie location
+        let cookie_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "cookie-secret".to_string(),
+            var_name: "session".to_string(),
+            location: "cookie".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &cookie_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(
+            request.headers().get(header::COOKIE).unwrap(),
+            "session=cookie-secret"
+        );
+    }
+
+    #[test]
+    fn apply_auth_sets_basic_auth_header() {
+        let transport = HttpClientTransport::new();
+        let auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &auth)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            request.headers().get(header::AUTHORIZATION).unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+    }
+
+    #[test]
+    fn apply_auth_rejects_unsupported_oauth2() {
+        let transport = HttpClientTransport::new();
+        let auth = AuthConfig::OAuth2(OAuth2Auth {
+            auth_type: AuthType::OAuth2,
+            token_url: "https://auth.example.com/token".to_string(),
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            scope: None,
+        });
+
+        let err = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &auth)
+            .unwrap_err();
+        assert!(err.to_string().contains("OAuth2 auth is not yet supported"));
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_error_http_transport() {
+        async fn manifest_handler() -> Json<Value> {
+            Json(json!({
+                "tools": [{
+                    "name": "greet",
+                    "description": "says hello",
+                    "inputs": { "type": "object" },
+                    "outputs": { "type": "object" },
+                    "tags": []
+                }]
+            }))
+        }
+
+        async fn call_handler(Json(payload): Json<Value>) -> Json<Value> {
+            Json(json!({ "echo": payload }))
+        }
+
+        let app = Router::new()
+            .route("/", get(manifest_handler))
+            .route("/", post(call_handler));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let base_url = format!("http://{}", addr);
+        let provider = HttpProvider {
+            base: BaseProvider {
+                name: "http".to_string(),
+                provider_type: ProviderType::Http,
+                auth: None,
+            },
+            http_method: "POST".to_string(),
+            url: base_url.clone(),
+            content_type: None,
+            headers: None,
+            body_field: None,
+            header_fields: None,
+        };
+
+        let transport = HttpClientTransport::new();
+        let tools = transport
+            .register_tool_provider(&provider)
+            .await
+            .expect("register tools");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "greet");
+
+        let mut args = HashMap::new();
+        args.insert("name".into(), Value::String("http".into()));
+        let result = transport
+            .call_tool("ignored", args.clone(), &provider)
+            .await
+            .expect("call tool");
+        assert_eq!(result, json!({ "echo": json!(args) }));
+
+        let err = transport
+            .call_tool_stream("greet", args, &provider)
+            .await
+            .err()
+            .expect("expected streaming error");
+        assert!(err.to_string().contains("Streaming not supported"));
+    }
+}

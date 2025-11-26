@@ -259,3 +259,185 @@ impl ClientTransport for WebSocketTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::tungstenite::Message;
+
+    #[test]
+    fn apply_auth_to_url_appends_query_param() {
+        let transport = WebSocketTransport::new();
+        let auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "token".to_string(),
+            var_name: "auth".to_string(),
+            location: "query".to_string(),
+        });
+
+        let url = transport
+            .apply_auth_to_url("ws://example.com/socket", &auth)
+            .unwrap();
+        assert!(url.contains("auth=token"));
+    }
+
+    #[test]
+    fn apply_auth_headers_supports_basic_and_cookie() {
+        let transport = WebSocketTransport::new();
+
+        let basic_auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+        let mut req = "ws://example.com".into_client_request().unwrap();
+        transport
+            .apply_auth_headers(&mut req, &basic_auth)
+            .expect("basic auth applied");
+        assert_eq!(
+            req.headers().get("authorization").unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+
+        let cookie_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "session".to_string(),
+            location: "cookie".to_string(),
+        });
+        let mut req = "ws://example.com".into_client_request().unwrap();
+        transport
+            .apply_auth_headers(&mut req, &cookie_auth)
+            .expect("cookie auth applied");
+        assert_eq!(req.headers().get("cookie").unwrap(), "session=secret");
+    }
+
+    #[test]
+    fn build_request_includes_provider_headers_and_protocol() {
+        let transport = WebSocketTransport::new();
+        let prov = WebSocketProvider {
+            base: BaseProvider {
+                name: "ws".to_string(),
+                provider_type: ProviderType::Websocket,
+                auth: Some(AuthConfig::ApiKey(ApiKeyAuth {
+                    auth_type: AuthType::ApiKey,
+                    api_key: "abc".to_string(),
+                    var_name: "X-Key".to_string(),
+                    location: "header".to_string(),
+                })),
+            },
+            url: "ws://example.com/socket".to_string(),
+            protocol: Some("json".to_string()),
+            keep_alive: false,
+            headers: Some(HashMap::from([(
+                "X-Custom".to_string(),
+                "1".to_string(),
+            )])),
+        };
+
+        let req = transport.build_request(&prov, &prov.url).unwrap();
+        assert_eq!(req.uri().to_string(), prov.url);
+        assert_eq!(req.headers().get("X-Custom").unwrap(), "1");
+        assert_eq!(req.headers().get("Sec-WebSocket-Protocol").unwrap(), "json");
+        assert_eq!(req.headers().get("X-Key").unwrap(), "abc");
+    }
+
+    #[tokio::test]
+    async fn register_call_and_stream_over_websocket() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_clone = counter.clone();
+
+        tokio::spawn(async move {
+            for _ in 0..3 {
+                let (stream, _) = listener.accept().await.unwrap();
+                let idx = counter_clone.fetch_add(1, Ordering::SeqCst);
+                tokio::spawn(async move {
+                    let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+                    match idx {
+                        0 => {
+                            // Manual lookup
+                            let _ = ws.next().await;
+                            let manifest = json!({
+                                "tools": [{
+                                    "name": "echo",
+                                    "description": "echo tool",
+                                    "inputs": { "type": "object" },
+                                    "outputs": { "type": "object" },
+                                    "tags": []
+                                }]
+                            });
+                            let _ = ws.send(Message::Text(manifest.to_string())).await;
+                        }
+                        1 => {
+                            if let Some(Ok(Message::Text(text))) = ws.next().await {
+                                let parsed: Value =
+                                    serde_json::from_str(&text).unwrap_or_else(|_| Value::Null);
+                                let reply = json!({ "echo": parsed });
+                                let _ = ws.send(Message::Text(reply.to_string())).await;
+                                let _ = ws.close(None).await;
+                            }
+                        }
+                        _ => {
+                            let _ = ws.next().await;
+                            let _ = ws
+                                .send(Message::Text(json!({ "idx": 1 }).to_string()))
+                                .await;
+                            let _ = ws
+                                .send(Message::Text(json!({ "idx": 2 }).to_string()))
+                                .await;
+                            let _ = ws.close(None).await;
+                        }
+                    }
+                });
+            }
+        });
+
+        let prov = WebSocketProvider {
+            base: BaseProvider {
+                name: "ws".to_string(),
+                provider_type: ProviderType::Websocket,
+                auth: None,
+            },
+            url: format!("ws://{}/tools", addr),
+            protocol: None,
+            keep_alive: false,
+            headers: None,
+        };
+
+        let transport = WebSocketTransport::new();
+
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register tools");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "echo");
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hello".into()));
+
+        let call_value = transport
+            .call_tool("echo", args.clone(), &prov)
+            .await
+            .expect("call tool");
+        assert_eq!(call_value, json!([json!({ "echo": json!(args) })]));
+
+        let mut stream = transport
+            .call_tool_stream("stream", args, &prov)
+            .await
+            .expect("call tool stream");
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 1 }));
+        assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 2 }));
+        stream.close().await.unwrap();
+    }
+}

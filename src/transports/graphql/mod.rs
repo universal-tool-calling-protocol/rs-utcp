@@ -249,3 +249,95 @@ impl ClientTransport for GraphQLTransport {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{extract::Json, routing::post, Router};
+    use serde_json::json;
+    use std::net::TcpListener;
+
+    #[test]
+    fn infer_operation_prefers_explicit_value() {
+        assert_eq!(GraphQLTransport::infer_operation("Mutation", "getUser"), "mutation");
+        assert_eq!(GraphQLTransport::infer_operation("subscription", "createUser"), "subscription");
+        assert_eq!(GraphQLTransport::infer_operation("QUERY", "deleteUser"), "query");
+    }
+
+    #[test]
+    fn infer_operation_derives_from_tool_name_when_unspecified() {
+        assert_eq!(GraphQLTransport::infer_operation("", "subscription_changes"), "subscription");
+        assert_eq!(GraphQLTransport::infer_operation("unknown", "createItem"), "mutation");
+        assert_eq!(GraphQLTransport::infer_operation("  ", "listItems"), "query");
+    }
+
+    #[tokio::test]
+    async fn register_and_call_graphql_transport() {
+        async fn handler(Json(body): Json<Value>) -> Json<Value> {
+            let query_str = body.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            if query_str.contains("__schema") {
+                return Json(json!({
+                    "data": {
+                        "__schema": {
+                            "queryType": { "fields": [{ "name": "hello", "description": "hi" }] },
+                            "mutationType": null,
+                            "subscriptionType": null
+                        }
+                    }
+                }));
+            }
+
+            Json(json!({
+                "data": {
+                    "hello": {
+                        "msg": "hi"
+                    }
+                }
+            }))
+        }
+
+        let app = Router::new().route("/", post(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let prov = GraphqlProvider {
+            base: crate::providers::base::BaseProvider {
+                name: "gql".to_string(),
+                provider_type: crate::providers::base::ProviderType::Graphql,
+                auth: None,
+            },
+            url: format!("http://{}", addr),
+            operation_type: "query".to_string(),
+            operation_name: None,
+            headers: None,
+        };
+
+        let transport = GraphQLTransport::new();
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "hello");
+
+        let result = transport
+            .call_tool("hello", HashMap::new(), &prov)
+            .await
+            .expect("call");
+        assert_eq!(result["hello"]["msg"], "hi");
+
+        let err = transport
+            .call_tool_stream("hello", HashMap::new(), &prov)
+            .await
+            .err()
+            .expect("stream error");
+        assert!(err.to_string().contains("GraphQL subscriptions"));
+    }
+}
