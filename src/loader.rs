@@ -19,6 +19,7 @@ use crate::providers::text::TextProvider;
 use crate::providers::udp::UdpProvider;
 use crate::providers::webrtc::WebRtcProvider;
 use crate::providers::websocket::WebSocketProvider;
+use crate::spec::ManualV1;
 
 /// Parse a providers JSON file
 /// Supports multiple formats:
@@ -65,7 +66,11 @@ pub async fn load_providers_with_tools_from_file(
     // If this is a manual with tools, collect tools per provider
     if let Some(obj) = json.as_object() {
         if obj.get("tools").is_some() {
-            let (providers, tools) = parse_manual_tools_with_providers(json, config)?;
+            let _manual: ManualV1 = serde_json::from_value(json.clone())
+                .map_err(|e| anyhow!("Invalid v1.0 manual: {}", e))?;
+
+            let (providers, tools) =
+                parse_manual_tools_with_providers(json.clone(), config)?;
             return Ok(providers
                 .into_iter()
                 .zip(tools.into_iter())
@@ -547,6 +552,7 @@ mod tests {
             r#"{{
                 "manual_version": "1.0.0",
                 "utcp_version": "0.2.0",
+                "info": {{ "title": "demo", "version": "1.0.0" }},
                 "tools": [
                     {{
                         "name": "echo",
