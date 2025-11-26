@@ -1,36 +1,40 @@
 # rs-utcp
 
-Rust client for the Universal Tool Calling Protocol (UTCP). Discover and call tools across HTTP, CLI, WebSocket, gRPC, GraphQL, TCP/UDP, SSE, MCP, WebRTC, HTTP stream, and text providers with one API.
+Hey! 👋 This is the Rust client for the **Universal Tool Calling Protocol (UTCP)**.
 
-## Why use this client?
+Basically, I wanted a way to discover and call tools across a whole bunch of different protocols—HTTP, CLI, WebSocket, gRPC, MCP, you name it—without having to write custom glue code for every single one. This library gives you a **single, unified API** to handle all of that.
 
-- One interface for many transports — providers describe endpoints, transports handle protocols.
-- Discovery + invocation — load providers, search by tags/descriptions, call tools or stream responses.
-- Config-driven — `new_with_providers` loads JSON provider manifests so you can ship endpoints without recompiling.
-- Codemode — generate and run Rhai snippets that orchestrate tools; includes an optional LLM-driven orchestrator.
+It's heavily inspired by the [go-utcp](https://github.com/universal-tool-calling-protocol/go-utcp) project, but built from the ground up for Rust. 🦀
 
-## Install / prereqs
+## Why use this?
 
-- Rust toolchain (1.70+ recommended)
-- `protoc` if you want to build the gRPC example
+*   **One API for everything**: You don't care if a tool is a local Python script, a remote gRPC service, or an MCP server. You just ask for the tool by name, and `rs-utcp` handles the transport.
+*   **Config-driven**: You can load your tool providers from a JSON file. This is huge because it means you can add or change endpoints without recompiling your app.
+*   **Codemode**: This is the really cool part. 🚀 It includes a scripting environment (powered by [Rhai](https://rhai.rs/)) that lets you orchestrate complex workflows. You can even hook up an LLM to generate these scripts on the fly.
 
-Add to your project (path/git if not published):
+## Quick Start
+
+First, add it to your project:
 
 ```bash
 cargo add rs-utcp
 ```
 
-## Quick start
+(Or clone it locally if you're hacking on it).
 
-Run the bundled demo that spins up a mock HTTP provider and loads it via `new_with_providers`:
+### Try the demo
+
+I've included a bunch of examples to get you started. The easiest way to see it in action is the basic usage demo:
 
 ```bash
 cargo run --example basic_usage
 ```
 
-You’ll see the provider start, tools listed, and a sample tool call.
+This spins up a mock HTTP provider and shows you how to call a tool.
 
-## Minimal client setup
+### Minimal Setup
+
+Here's what it looks like to use it in your code:
 
 ```rust
 use rs_utcp::{
@@ -41,87 +45,71 @@ use rs_utcp::{
 };
 use std::sync::Arc;
 
-# #[tokio::main]
-# async fn main() -> anyhow::Result<()> {
-let config = UtcpClientConfig::new().with_providers_file("examples/providers.json".into());
-let repo = Arc::new(InMemoryToolRepository::new());
-let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-let client = UtcpClient::new(config, repo, search).await?;
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Load your providers (or define them in code)
+    let config = UtcpClientConfig::new().with_providers_file("examples/providers.json".into());
+    
+    // 2. Set up the repo and search strategy
+    let repo = Arc::new(InMemoryToolRepository::new());
+    let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
+    
+    // 3. Create the client
+    let client = UtcpClient::new(config, repo, search).await?;
 
-let tools = client.search_tools("echo", 10).await?;
-println!("Found tools: {:?}", tools.iter().map(|t| &t.name).collect::<Vec<_>>());
-# Ok(())
-# }
-```
-
-### Provider JSON example
-
-```json
-{
-  "providers": [
-    {
-      "provider_type": "http",
-      "name": "demo",
-      "url": "https://example.com/tools",
-      "http_method": "POST",
-      "headers": { "Authorization": "Bearer ${API_KEY}" }
-    }
-  ]
+    // 4. Find and use tools!
+    let tools = client.search_tools("echo", 10).await?;
+    println!("Found tools: {:?}", tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+    
+    Ok(())
 }
 ```
 
-Variables are substituted from `UtcpClientConfig::variables` or environment variables.
+## Supported Transports
 
-## Example gallery
+We support a lot of protocols out of the box. Some are more mature than others, but here's the list:
 
-- `cargo run --example basic_usage` — spin up a local HTTP provider, load via `new_with_providers`, call a tool.
-- `cargo run --example load_from_json` — load providers from `examples/providers.json`.
-- `cargo run --example http_server` — demo HTTP provider + client.
-- `cargo run --example websocket_server` / `sse_server` / `tcp_server` / `udp_server` / `http_stream_server` / `grpc_server` / `graphql_server` / `mcp_server` — self-hosted provider for each transport.
-- `cargo run --example mcp_stdio` — MCP stdio transport with a Python calculator server (see [MCP_STDIO_README.md](examples/MCP_STDIO_README.md)).
-- `cargo run --example cli_program` — treat the binary as its own CLI provider.
-- `cargo run --example codemode_eval` — evaluate Rust-like snippets (Rhai) that can call UTCP tools.
-- `cargo run --example all_providers` — env-driven sampler for every transport (set `DEMO_*` vars).
+*   **HTTP** (The most battle-tested)
+*   **MCP** (Model Context Protocol - supports both stdio and SSE!)
+*   **WebSocket**
+*   **gRPC**
+*   **CLI** (Run local binaries as tools)
+*   **GraphQL**
+*   **TCP / UDP**
+*   **SSE** (Server-Sent Events)
+*   **WebRTC** (Experimental)
 
-## Codemode
+Check out the `examples/` folder for a working server/client demo of almost every transport.
 
-Rhai-powered orchestration of UTCP tools:
+## Codemode & Orchestration
 
-- Helpers inside snippets: `call_tool("<provider.tool>", #{...})`, `call_tool_stream`, `search_tools`, `sprintf`.
-- Example snippet:
-  ```text
-  let echo = call_tool("http_demo.echo", #{"message": "hi"});
-  echo
-  ```
-- Run the demo: `cargo run --example codemode_eval`
+If you want to get fancy, you can use "Codemode". It allows you to execute Rhai scripts that have access to your registered tools.
 
-LLM-driven orchestrator: implement `LlmModel::complete(prompt) -> String`, wire it into `CodemodeOrchestrator`, and it will (1) decide if tools are needed, (2) pick tools, (3) ask the model to emit a snippet, (4) execute via CodeMode.
+```rust
+// Inside a Rhai script
+let result = call_tool("http_demo.echo", #{"message": "Hello from Rhai!"});
+print(result);
+```
 
-## Architecture notes
-
-- `UtcpClient` caches provider tools and resolved tool → transport bindings for fast calls.
-- Transports live in `src/transports/` (http, cli, ws, grpc, graphql, tcp, udp, sse, mcp, webrtc, http_stream, text).
-- Providers mirror transports in `src/providers/`.
-- Repository abstraction in `src/repository/` (in-memory default).
-- Tag-based search in `src/tag/`.
-
-## Development
-
-- Format: `cargo fmt`
-- Check: `cargo check --examples`
-- Tests: `cargo test`
-- Try a demo: `cargo run --example http_server` (or any from the gallery)
+You can run the evaluator demo to play with this:
+```bash
+cargo run --example codemode_eval
+```
 
 ## Status
 
-- HTTP is feature-complete; other transports are demo-ready skeletons.
-- Auth helpers exist (API key, basic, OAuth2 scaffolding).
-- OpenAPI/spec generation is planned.
+*   **HTTP**: Solid and feature-complete.
+*   **MCP**: Working well (stdio & SSE).
+*   **Others**: Mostly functional skeletons. They work for the happy path, but might need some hardening.
+
+If you find a bug or want to add a new transport, PRs are super welcome!
+
+## Development
+
+*   **Format**: `cargo fmt`
+*   **Check**: `cargo check --examples`
+*   **Test**: `cargo test`
 
 ## License
 
-TBD — add your license file and update this section.
-
-## Credits
-
-Based on the [go-utcp](https://github.com/universal-tool-calling-protocol/go-utcp) project.
+MIT (or whichever license you prefer, just update this).
