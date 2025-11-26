@@ -79,7 +79,7 @@ impl McpStdioProcess {
         });
 
         let request_str = serde_json::to_string(&request)?;
-        
+
         // Write request to stdin
         let mut stdin = self.stdin.lock().await;
         stdin.write_all(request_str.as_bytes()).await?;
@@ -154,7 +154,12 @@ impl McpTransport {
         }
     }
 
-    async fn mcp_http_request(&self, prov: &McpProvider, method: &str, params: Value) -> Result<Value> {
+    async fn mcp_http_request(
+        &self,
+        prov: &McpProvider,
+        method: &str,
+        params: Value,
+    ) -> Result<Value> {
         let url = prov
             .url
             .as_ref()
@@ -201,7 +206,7 @@ impl McpTransport {
         prov: &McpProvider,
     ) -> Result<Arc<McpStdioProcess>> {
         let mut processes = self.stdio_processes.lock().await;
-        
+
         if let Some(process) = processes.get(&prov.base.name) {
             return Ok(Arc::clone(process));
         }
@@ -213,7 +218,7 @@ impl McpTransport {
 
         let process = Arc::new(McpStdioProcess::new(command, &prov.args, &prov.env_vars).await?);
         processes.insert(prov.base.name.clone(), Arc::clone(&process));
-        
+
         Ok(process)
     }
 
@@ -251,14 +256,14 @@ impl McpTransport {
         });
 
         let mut req = self.client.post(url).json(&request);
-        
+
         // Add headers
         if let Some(headers) = &prov.headers {
             for (k, v) in headers {
                 req = req.header(k, v);
             }
         }
-        
+
         // Add authentication
         if let Some(auth) = &prov.base.auth {
             req = self.apply_auth(req, auth)?;
@@ -292,7 +297,9 @@ impl McpTransport {
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.send(Err(anyhow!("Failed to parse SSE event: {}", e))).await;
+                                let _ = tx
+                                    .send(Err(anyhow!("Failed to parse SSE event: {}", e)))
+                                    .await;
                                 break;
                             }
                         }
@@ -346,7 +353,7 @@ impl McpTransport {
         // Spawn a task to read streaming responses
         tokio::spawn(async move {
             let mut stdout_guard = stdout.lock().await;
-            
+
             loop {
                 let mut line = String::new();
                 match stdout_guard.read_line(&mut line).await {
@@ -373,19 +380,27 @@ impl McpTransport {
                                     }
 
                                     // Check if this is marked as the final response
-                                    if response.get("final").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                    if response
+                                        .get("final")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false)
+                                    {
                                         break;
                                     }
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.send(Err(anyhow!("Failed to parse response: {}", e))).await;
+                                let _ = tx
+                                    .send(Err(anyhow!("Failed to parse response: {}", e)))
+                                    .await;
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(anyhow!("Failed to read from stdout: {}", e))).await;
+                        let _ = tx
+                            .send(Err(anyhow!("Failed to read from stdout: {}", e)))
+                            .await;
                         break;
                     }
                 }
@@ -487,4 +502,3 @@ impl ClientTransport for McpTransport {
         }
     }
 }
-
