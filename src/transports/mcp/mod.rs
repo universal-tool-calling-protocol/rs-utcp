@@ -57,10 +57,13 @@ impl McpStdioProcess {
             .take()
             .ok_or_else(|| anyhow!("Failed to get stdout"))?;
 
+        // Use larger buffers for better I/O performance (64KB)
+        let buf_reader = BufReader::with_capacity(65536, stdout);
+        
         Ok(Self {
             child,
             stdin: Arc::new(Mutex::new(stdin)),
-            stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
+            stdout: Arc::new(Mutex::new(buf_reader)),
             request_id: Arc::new(Mutex::new(1)),
         })
     }
@@ -119,8 +122,19 @@ pub struct McpTransport {
 
 impl McpTransport {
     pub fn new() -> Self {
+        // Optimized HTTP client for MCP transport
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(120)) // Longer timeout for MCP operations
+            .pool_max_idle_per_host(50) // Connection pool for MCP servers
+            .pool_idle_timeout(Some(std::time::Duration::from_secs(90)))
+            .tcp_keepalive(Some(std::time::Duration::from_secs(30)))
+            .gzip(true) // Enable compression
+            .http2_adaptive_window(true)
+            .build()
+            .expect("Failed to build MCP HTTP client");
+            
         Self {
-            client: Client::new(),
+            client,
             stdio_processes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -279,7 +293,8 @@ impl McpTransport {
         }
 
         // Create a channel to stream results
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        // Create a channel to stream results with larger buffer
+        let (tx, rx) = tokio::sync::mpsc::channel(256);
 
         // Spawn a task to read SSE events
         tokio::spawn(async move {
@@ -345,7 +360,8 @@ impl McpTransport {
         drop(stdin);
 
         // Create a channel to stream results
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        // Create a channel to stream results with larger buffer
+        let (tx, rx) = tokio::sync::mpsc::channel(256);
 
         // Clone Arc for the task
         let stdout = Arc::clone(&process.stdout);

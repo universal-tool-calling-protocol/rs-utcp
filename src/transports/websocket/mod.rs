@@ -201,6 +201,13 @@ impl ClientTransport for WebSocketTransport {
                         .unwrap_or_else(|_| Value::String(text));
                     results.push(value);
                 }
+                Ok(Message::Binary(bin)) => {
+                    if let Ok(text) = String::from_utf8(bin) {
+                        let value = serde_json::from_str::<Value>(&text)
+                            .unwrap_or_else(|_| Value::String(text));
+                        results.push(value);
+                    }
+                }
                 Ok(Message::Close(_)) | Err(_) => break,
                 _ => {}
             }
@@ -233,7 +240,7 @@ impl ClientTransport for WebSocketTransport {
             .send(Message::Text(serde_json::to_string(&args)?))
             .await?;
 
-        let (tx, rx) = mpsc::channel(16);
+        let (tx, rx) = mpsc::channel(256);
         tokio::spawn(async move {
             while let Some(msg) = ws_stream.next().await {
                 match msg {
@@ -242,6 +249,15 @@ impl ClientTransport for WebSocketTransport {
                             .map_err(|e| anyhow!("Failed to parse WebSocket message: {}", e));
                         if tx.send(parsed).await.is_err() {
                             return;
+                        }
+                    }
+                    Ok(Message::Binary(bin)) => {
+                        if let Ok(text) = String::from_utf8(bin) {
+                            let parsed = serde_json::from_str::<Value>(&text)
+                                .map_err(|e| anyhow!("Failed to parse WebSocket message: {}", e));
+                            if tx.send(parsed).await.is_err() {
+                                return;
+                            }
                         }
                     }
                     Ok(Message::Close(_)) => break,
