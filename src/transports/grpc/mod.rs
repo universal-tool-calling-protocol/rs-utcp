@@ -183,3 +183,50 @@ impl ClientTransport for GrpcTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+
+    #[test]
+    fn apply_auth_sets_basic_header() {
+        let transport = GrpcTransport::new();
+        let prov = GrpcProvider::new(
+            "grpc".to_string(),
+            "localhost".to_string(),
+            50051,
+            Some(AuthConfig::Basic(BasicAuth {
+                auth_type: AuthType::Basic,
+                username: "user".to_string(),
+                password: "pass".to_string(),
+            })),
+        );
+
+        let mut request: Request<()> = Request::new(());
+        transport.apply_auth(&prov, &mut request).unwrap();
+
+        let header = request.metadata().get("authorization").unwrap();
+        assert_eq!(header.to_str().unwrap(), "Basic dXNlcjpwYXNz");
+    }
+
+    #[test]
+    fn apply_auth_rejects_non_basic() {
+        let transport = GrpcTransport::new();
+        let prov = GrpcProvider::new(
+            "grpc".to_string(),
+            "localhost".to_string(),
+            50051,
+            Some(AuthConfig::ApiKey(ApiKeyAuth {
+                auth_type: AuthType::ApiKey,
+                api_key: "secret".to_string(),
+                var_name: "X-Api-Key".to_string(),
+                location: "header".to_string(),
+            })),
+        );
+
+        let mut request: Request<()> = Request::new(());
+        let err = transport.apply_auth(&prov, &mut request).unwrap_err();
+        assert!(err.to_string().contains("Only basic auth is supported"));
+    }
+}

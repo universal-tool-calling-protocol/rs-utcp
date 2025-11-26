@@ -249,3 +249,22 @@ impl ClientTransport for GraphQLTransport {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infer_operation_prefers_explicit_value() {
+        assert_eq!(GraphQLTransport::infer_operation("Mutation", "getUser"), "mutation");
+        assert_eq!(GraphQLTransport::infer_operation("subscription", "createUser"), "subscription");
+        assert_eq!(GraphQLTransport::infer_operation("QUERY", "deleteUser"), "query");
+    }
+
+    #[test]
+    fn infer_operation_derives_from_tool_name_when_unspecified() {
+        assert_eq!(GraphQLTransport::infer_operation("", "subscription_changes"), "subscription");
+        assert_eq!(GraphQLTransport::infer_operation("unknown", "createItem"), "mutation");
+        assert_eq!(GraphQLTransport::infer_operation("  ", "listItems"), "query");
+    }
+}

@@ -502,3 +502,54 @@ impl ClientTransport for McpTransport {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType};
+    use crate::providers::base::{BaseProvider, ProviderType};
+
+    #[test]
+    fn apply_auth_adds_expected_headers() {
+        let transport = McpTransport::new();
+        let auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "X-MCP".to_string(),
+            location: "header".to_string(),
+        });
+
+        let request = transport
+            .apply_auth(reqwest::Client::new().post("http://example.com"), &auth)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert_eq!(request.headers().get("X-MCP").unwrap(), "secret");
+    }
+
+    #[tokio::test]
+    async fn mcp_request_requires_transport_configuration() {
+        let transport = McpTransport::new();
+        let prov = McpProvider {
+            base: BaseProvider {
+                name: "invalid".to_string(),
+                provider_type: ProviderType::Mcp,
+                auth: None,
+            },
+            url: None,
+            headers: None,
+            command: None,
+            args: None,
+            env_vars: None,
+        };
+
+        let err = transport
+            .mcp_request(&prov, "ping", Value::Null)
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("MCP provider must have either 'url' (HTTP) or 'command' (stdio)"));
+    }
+}

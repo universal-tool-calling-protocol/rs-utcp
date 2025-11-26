@@ -87,3 +87,47 @@ impl ClientTransport for TcpTransport {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::base::{BaseProvider, ProviderType};
+    use serde_json::json;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn call_tool_round_trips_over_tcp() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            socket.read_to_end(&mut buf).await.unwrap();
+            let args_value: Value = serde_json::from_slice(&buf).unwrap();
+            let response = serde_json::to_vec(&json!({ "echo": args_value })).unwrap();
+            socket.write_all(&response).await.unwrap();
+        });
+
+        let prov = TcpProvider {
+            base: BaseProvider {
+                name: "tcp".to_string(),
+                provider_type: ProviderType::Tcp,
+                auth: None,
+            },
+            host: addr.ip().to_string(),
+            port: addr.port(),
+            timeout_ms: None,
+        };
+
+        let mut args = HashMap::new();
+        args.insert("msg".to_string(), Value::String("hello".to_string()));
+
+        let result = TcpTransport::new()
+            .call_tool("ignored", args.clone(), &prov)
+            .await
+            .unwrap();
+
+        assert_eq!(result.get("echo"), Some(&json!(args)));
+    }
+}

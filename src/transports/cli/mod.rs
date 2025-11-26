@@ -253,3 +253,59 @@ impl ClientTransport for CliTransport {
         Err(anyhow!("Streaming not supported by CliTransport"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn format_arguments_handles_types_and_ordering() {
+        let transport = CliTransport::new();
+        let mut args = HashMap::new();
+        args.insert("message".to_string(), Value::String("hello".to_string()));
+        args.insert("count".to_string(), Value::Number(2.into()));
+        args.insert("enabled".to_string(), Value::Bool(true));
+        args.insert("skip".to_string(), Value::Bool(false));
+        args.insert(
+            "ids".to_string(),
+            Value::Array(vec![Value::Number(1.into()), Value::Number(2.into())]),
+        );
+
+        let formatted = transport.format_arguments(&args);
+        assert_eq!(
+            formatted,
+            vec![
+                "--count",
+                "2",
+                "--enabled",
+                "--ids",
+                "1",
+                "--ids",
+                "2",
+                "--message",
+                "hello"
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_tools_from_output_parses_manifest() {
+        let transport = CliTransport::new();
+        let output = json!({
+            "tools": [{
+                "name": "example",
+                "description": "example tool",
+                "inputs": { "type": "object" },
+                "outputs": { "type": "object" },
+                "tags": []
+            }]
+        })
+        .to_string();
+
+        let tools = transport.extract_tools_from_output(&output);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "example");
+        assert_eq!(tools[0].description, "example tool");
+    }
+}

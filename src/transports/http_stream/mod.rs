@@ -182,3 +182,75 @@ impl ClientTransport for StreamableHttpTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth, OAuth2Auth};
+
+    #[test]
+    fn apply_auth_sets_expected_headers_and_query() {
+        let transport = StreamableHttpTransport::new();
+
+        let header_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "X-Stream-Key".to_string(),
+            location: "header".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &header_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(
+            request.headers().get("X-Stream-Key").unwrap(),
+            "secret"
+        );
+
+        let query_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "abc".to_string(),
+            var_name: "token".to_string(),
+            location: "query".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &query_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(request.url().query(), Some("token=abc"));
+
+        let basic_auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+        let request = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &basic_auth)
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(
+            request.headers().get(header::AUTHORIZATION).unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+    }
+
+    #[test]
+    fn apply_auth_rejects_oauth2() {
+        let transport = StreamableHttpTransport::new();
+        let auth = AuthConfig::OAuth2(OAuth2Auth {
+            auth_type: AuthType::OAuth2,
+            token_url: "https://auth.example.com/token".to_string(),
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            scope: None,
+        });
+
+        let err = transport
+            .apply_auth(reqwest::Client::new().get("http://example.com"), &auth)
+            .unwrap_err();
+        assert!(err.to_string().contains("OAuth2 auth is not yet supported"));
+    }
+}

@@ -242,3 +242,88 @@ impl ClientTransport for SseTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::base::{BaseProvider, ProviderType};
+
+    #[test]
+    fn build_payload_respects_body_field() {
+        let transport = SseTransport::new();
+        let mut args = HashMap::new();
+        args.insert("message".to_string(), json!("hi"));
+
+        let prov = SseProvider {
+            base: BaseProvider {
+                name: "sse".to_string(),
+                provider_type: ProviderType::Sse,
+                auth: None,
+            },
+            url: "http://example.com".to_string(),
+            headers: None,
+            body_field: Some("data".to_string()),
+            header_fields: None,
+        };
+
+        let payload = transport.build_payload(&prov, args.clone());
+        assert_eq!(payload, json!({ "data": args }));
+
+        let prov_no_field = SseProvider::new("sse".to_string(), "http://example.com".to_string(), None);
+        let payload = transport.build_payload(&prov_no_field, args.clone());
+        assert_eq!(payload, json!(args));
+    }
+
+    #[test]
+    fn apply_headers_adds_accept_and_custom_headers() {
+        let transport = SseTransport::new();
+        let prov = SseProvider {
+            base: BaseProvider {
+                name: "sse".to_string(),
+                provider_type: ProviderType::Sse,
+                auth: None,
+            },
+            url: "http://example.com".to_string(),
+            headers: Some(HashMap::from([(
+                "X-Test".to_string(),
+                "123".to_string(),
+            )])),
+            body_field: None,
+            header_fields: None,
+        };
+
+        let request = transport
+            .apply_headers(
+                reqwest::Client::new().get("http://example.com"),
+                &prov,
+                Some("text/event-stream"),
+            )
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            request.headers().get("accept").unwrap(),
+            "text/event-stream"
+        );
+        assert_eq!(request.headers().get("x-test").unwrap(), "123");
+    }
+
+    #[test]
+    fn parse_tools_from_body_reads_manifest() {
+        let transport = SseTransport::new();
+        let body = json!({
+            "tools": [{
+                "name": "stream-tool",
+                "description": "streams",
+                "inputs": { "type": "object" },
+                "outputs": { "type": "object" },
+                "tags": []
+            }]
+        })
+        .to_string();
+
+        let tools = transport.parse_tools_from_body(&body);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "stream-tool");
+    }
+}

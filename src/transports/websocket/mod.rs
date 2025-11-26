@@ -259,3 +259,87 @@ impl ClientTransport for WebSocketTransport {
         Ok(boxed_channel_stream(rx, None))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+    use crate::providers::base::{BaseProvider, ProviderType};
+
+    #[test]
+    fn apply_auth_to_url_appends_query_param() {
+        let transport = WebSocketTransport::new();
+        let auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "token".to_string(),
+            var_name: "auth".to_string(),
+            location: "query".to_string(),
+        });
+
+        let url = transport
+            .apply_auth_to_url("ws://example.com/socket", &auth)
+            .unwrap();
+        assert!(url.contains("auth=token"));
+    }
+
+    #[test]
+    fn apply_auth_headers_supports_basic_and_cookie() {
+        let transport = WebSocketTransport::new();
+
+        let basic_auth = AuthConfig::Basic(BasicAuth {
+            auth_type: AuthType::Basic,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        });
+        let mut req = "ws://example.com".into_client_request().unwrap();
+        transport
+            .apply_auth_headers(&mut req, &basic_auth)
+            .expect("basic auth applied");
+        assert_eq!(
+            req.headers().get("authorization").unwrap(),
+            "Basic dXNlcjpwYXNz"
+        );
+
+        let cookie_auth = AuthConfig::ApiKey(ApiKeyAuth {
+            auth_type: AuthType::ApiKey,
+            api_key: "secret".to_string(),
+            var_name: "session".to_string(),
+            location: "cookie".to_string(),
+        });
+        let mut req = "ws://example.com".into_client_request().unwrap();
+        transport
+            .apply_auth_headers(&mut req, &cookie_auth)
+            .expect("cookie auth applied");
+        assert_eq!(req.headers().get("cookie").unwrap(), "session=secret");
+    }
+
+    #[test]
+    fn build_request_includes_provider_headers_and_protocol() {
+        let transport = WebSocketTransport::new();
+        let prov = WebSocketProvider {
+            base: BaseProvider {
+                name: "ws".to_string(),
+                provider_type: ProviderType::Websocket,
+                auth: Some(AuthConfig::ApiKey(ApiKeyAuth {
+                    auth_type: AuthType::ApiKey,
+                    api_key: "abc".to_string(),
+                    var_name: "X-Key".to_string(),
+                    location: "header".to_string(),
+                })),
+            },
+            url: "ws://example.com/socket".to_string(),
+            protocol: Some("json".to_string()),
+            keep_alive: false,
+            headers: Some(HashMap::from([(
+                "X-Custom".to_string(),
+                "1".to_string(),
+            )])),
+        };
+
+        let req = transport.build_request(&prov, &prov.url).unwrap();
+        assert_eq!(req.uri().to_string(), prov.url);
+        assert_eq!(req.headers().get("X-Custom").unwrap(), "1");
+        assert_eq!(req.headers().get("Sec-WebSocket-Protocol").unwrap(), "json");
+        assert_eq!(req.headers().get("X-Key").unwrap(), "abc");
+    }
+}
