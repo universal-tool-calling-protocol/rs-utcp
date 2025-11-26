@@ -1,4 +1,6 @@
-# rs-utcp
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/9c3a9645-7e21-47d9-8bd2-59ad5ae3d3bc" alt="Centered image" width="512" height="512">
+</p>
 
 Hey! 👋 This is the Rust client for the **Universal Tool Calling Protocol (UTCP)**.
 
