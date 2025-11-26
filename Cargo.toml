@@ -1,6 +1,6 @@
 [package]
 name = "rs-utcp"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 description = "Rust implementation of the Universal Tool Calling Protocol (UTCP)."
 license = "MIT OR Apache-2.0"
