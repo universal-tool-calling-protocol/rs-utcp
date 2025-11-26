@@ -46,7 +46,7 @@ use std::sync::Arc;
 let config = UtcpClientConfig::new().with_providers_file("examples/providers.json".into());
 let repo = Arc::new(InMemoryToolRepository::new());
 let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-let client = UtcpClient::new_with_providers(config, repo, search).await?;
+let client = UtcpClient::new(config, repo, search).await?;
 
 let tools = client.search_tools("echo", 10).await?;
 println!("Found tools: {:?}", tools.iter().map(|t| &t.name).collect::<Vec<_>>());
