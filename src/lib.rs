@@ -1,5 +1,7 @@
 pub mod auth;
 pub mod config;
+pub mod migration;
+pub mod errors;
 pub mod grpcpb;
 pub mod loader;
 pub mod plugins;
@@ -16,6 +18,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::errors::UtcpError;
 use crate::config::UtcpClientConfig;
 use crate::openapi::OpenApiConverter;
 use crate::providers::base::{Provider, ProviderType};
@@ -28,6 +31,11 @@ use crate::transports::ClientTransport;
 #[async_trait]
 pub trait UtcpClientInterface: Send + Sync {
     async fn register_tool_provider(&self, prov: Arc<dyn Provider>) -> Result<Vec<Tool>>;
+    async fn register_tool_provider_with_tools(
+        &self,
+        prov: Arc<dyn Provider>,
+        tools: Vec<Tool>,
+    ) -> Result<Vec<Tool>>;
     async fn deregister_tool_provider(&self, provider_name: &str) -> Result<()>;
     async fn call_tool(
         &self,
@@ -61,6 +69,15 @@ struct ResolvedTool {
 }
 
 impl UtcpClient {
+    /// v1.0-style async factory for symmetry with other language SDKs
+    pub async fn create(
+        config: UtcpClientConfig,
+        repo: Arc<dyn ToolRepository>,
+        strat: Arc<dyn ToolSearchStrategy>,
+    ) -> Result<Self> {
+        Self::new(config, repo, strat).await
+    }
+
     /// Create a new UtcpClient and automatically load providers from the JSON file specified in config
     pub async fn new(
         config: UtcpClientConfig,
@@ -130,11 +147,20 @@ impl UtcpClient {
 
         // Load providers if file path is specified
         if let Some(providers_path) = &client.config.providers_file_path {
-            let providers =
-                crate::loader::load_providers_from_file(providers_path, &client.config).await?;
+            let providers = crate::loader::load_providers_with_tools_from_file(
+                providers_path,
+                &client.config,
+            )
+            .await?;
 
-            for provider in providers {
-                match client.register_tool_provider(provider).await {
+            for loaded in providers {
+                let result = if let Some(tools) = loaded.tools {
+                    client.register_tool_provider_with_tools(loaded.provider.clone(), tools).await
+                } else {
+                    client.register_tool_provider(loaded.provider.clone()).await
+                };
+
+                match result {
                     Ok(tools) => {
                         println!("✓ Loaded provider with {} tools", tools.len());
                     }
@@ -167,52 +193,105 @@ impl UtcpClient {
             }
         }
 
-        let (provider_name, _tool_suffix) = tool_name.split_once('.').ok_or_else(|| {
-            anyhow!(
-                "Invalid tool name format. Expected 'provider.tool', got: {}",
-                tool_name
-            )
-        })?;
-        if provider_name.is_empty() {
-            return Err(anyhow!(
-                "Invalid tool name format. Expected 'provider.tool', got: {}",
-                tool_name
-            ));
-        }
+        // Legacy qualified name flow
+        if let Some((provider_name, suffix)) = tool_name.split_once('.') {
+            if provider_name.is_empty() {
+                return Err(
+                    UtcpError::Config(format!("Invalid tool name: {}", tool_name)).into()
+                );
+            }
 
-        let prov = self
-            .tool_repository
-            .get_provider(provider_name)
-            .await?
-            .ok_or_else(|| anyhow!("Provider not found: {}", provider_name))?;
-        let provider_type = prov.type_();
+            let prov = self
+                .tool_repository
+                .get_provider(provider_name)
+                .await?
+                .ok_or_else(|| UtcpError::ToolNotFound(provider_name.to_string()))?;
+            let provider_type = prov.type_();
 
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?
-            .clone();
+            let transport_key = provider_type.as_key().to_string();
+            let transport = self
+                .transports
+                .get(&transport_key)
+                .ok_or_else(|| {
+                    UtcpError::Config(format!(
+                        "No transport found for provider type: {:?}",
+                        provider_type
+                    ))
+                })?
+                .clone();
 
-        let call_name = Self::call_name_for_provider(tool_name, &provider_type);
-        let resolved = ResolvedTool {
-            provider: prov.clone(),
-            transport: transport.clone(),
-            call_name,
-        };
+            let call_name = Self::call_name_for_provider(tool_name, &provider_type);
+            let resolved = ResolvedTool {
+                provider: prov.clone(),
+                transport: transport.clone(),
+                call_name,
+            };
 
-        {
             let mut cache = self.resolved_tools_cache.write().await;
             cache.insert(tool_name.to_string(), resolved.clone());
+            cache.insert(suffix.to_string(), resolved.clone());
+            return Ok(resolved);
         }
 
-        Ok(resolved)
+        // v1.0 bare tool names: search cached provider tools
+        {
+            let cache = self.provider_tools_cache.read().await;
+            for (prov_name, tools) in cache.iter() {
+                if tools.iter().any(|t| {
+                    t.name
+                        .split_once('.')
+                        .map(|(_, suffix)| suffix == tool_name)
+                        .unwrap_or(false)
+                }) {
+                    let prov = self
+                        .tool_repository
+                        .get_provider(prov_name)
+                        .await?
+                        .ok_or_else(|| UtcpError::ToolNotFound(prov_name.clone()))?;
+                    let provider_type = prov.type_();
+                    let transport_key = provider_type.as_key().to_string();
+                    let transport = self
+                        .transports
+                        .get(&transport_key)
+                        .ok_or_else(|| {
+                            UtcpError::Config(format!(
+                                "No transport found for provider type: {:?}",
+                                provider_type
+                            ))
+                        })?
+                        .clone();
+
+                    let full_name = format!("{}.{}", prov_name, tool_name);
+                    let call_name = Self::call_name_for_provider(&full_name, &provider_type);
+                    let resolved = ResolvedTool {
+                        provider: prov.clone(),
+                        transport: transport.clone(),
+                        call_name,
+                    };
+
+                    let mut rcache = self.resolved_tools_cache.write().await;
+                    rcache.insert(full_name, resolved.clone());
+                    rcache.insert(tool_name.to_string(), resolved.clone());
+                    return Ok(resolved);
+                }
+            }
+        }
+
+        Err(UtcpError::ToolNotFound(tool_name.to_string()).into())
     }
 }
 
 #[async_trait]
 impl UtcpClientInterface for UtcpClient {
     async fn register_tool_provider(&self, prov: Arc<dyn Provider>) -> Result<Vec<Tool>> {
+        self.register_tool_provider_with_tools(prov, Vec::new()).await
+    }
+
+    async fn register_tool_provider_with_tools(
+        &self,
+        prov: Arc<dyn Provider>,
+        tools_override: Vec<Tool>,
+    ) -> Result<Vec<Tool>> {
         let provider_name = prov.name();
         let provider_type = prov.type_();
 
@@ -233,7 +312,9 @@ impl UtcpClientInterface for UtcpClient {
             .clone();
 
         // Register with transport
-        let tools = if provider_type == ProviderType::Http {
+        let tools = if !tools_override.is_empty() {
+            tools_override
+        } else if provider_type == ProviderType::Http {
             if let Some(http_prov) = prov.as_any().downcast_ref::<HttpProvider>() {
                 match OpenApiConverter::new_from_url(&http_prov.url, Some(provider_name.clone()))
                     .await
@@ -279,14 +360,19 @@ impl UtcpClientInterface for UtcpClient {
             let mut resolved = self.resolved_tools_cache.write().await;
             for tool in &normalized_tools {
                 let call_name = Self::call_name_for_provider(&tool.name, &provider_type);
-                resolved.insert(
-                    tool.name.clone(),
-                    ResolvedTool {
-                        provider: prov.clone(),
-                        transport: transport.clone(),
-                        call_name,
-                    },
-                );
+                let resolved_entry = ResolvedTool {
+                    provider: prov.clone(),
+                    transport: transport.clone(),
+                    call_name,
+                };
+
+                // Full name
+                resolved.insert(tool.name.clone(), resolved_entry.clone());
+
+                // Bare name (v1.0 style)
+                if let Some((_, bare)) = tool.name.split_once('.') {
+                    resolved.insert(bare.to_string(), resolved_entry);
+                }
             }
         }
 

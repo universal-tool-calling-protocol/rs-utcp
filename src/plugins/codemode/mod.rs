@@ -469,6 +469,14 @@ mod tests {
             Ok(vec![])
         }
 
+        async fn register_tool_provider_with_tools(
+            &self,
+            _prov: Arc<dyn crate::providers::base::Provider>,
+            tools: Vec<Tool>,
+        ) -> Result<Vec<Tool>> {
+            Ok(tools)
+        }
+
         async fn deregister_tool_provider(&self, _provider_name: &str) -> Result<()> {
             Ok(())
         }
