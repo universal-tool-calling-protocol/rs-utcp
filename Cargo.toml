@@ -32,6 +32,7 @@ base64 = "0.21"
 bytes = "1"
 rhai = { version = "1.18", features = ["serde"] }
 eventsource-stream = "0.2"
+webrtc = "0.9"
 
 [build-dependencies]
 tonic-build = "0.11"
@@ -44,3 +45,5 @@ futures-util = "0.3"
 prost = "0.12"
 tonic = { version = "0.11", features = ["transport"] }
 tokio-stream = { version = "0.1", features = ["net"] }
+axum = "0.6"
+uuid = { version = "1", features = ["v4"] }
