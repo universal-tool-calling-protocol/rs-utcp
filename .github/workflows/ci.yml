@@ -35,5 +35,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run tests
-        run: cargo test --all --verbose
+      - name: Run all tests
+        run: |
+          set -euxo pipefail
+          cargo clean
+          cargo test --workspace --all-targets --verbose -- --nocapture
