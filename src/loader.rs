@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::call_templates;
 use crate::config::UtcpClientConfig;
 use crate::migration::{migrate_v01_config, validate_v1_config, validate_v1_manual};
 use crate::providers::base::Provider;
@@ -116,7 +117,7 @@ fn parse_providers_json(json: Value) -> Result<Vec<Value>> {
                 if let Some(arr) = templates_value.as_array() {
                     let mut providers = Vec::new();
                     for template in arr {
-                        providers.push(call_template_to_provider(template.clone())?);
+                        providers.push(call_templates::call_template_to_provider(template.clone())?);
                     }
                     return Ok(providers);
                 }
@@ -225,85 +226,16 @@ fn tool_to_provider(tool: &Value) -> Result<Option<Value>> {
         .ok_or_else(|| anyhow!("Tool must be an object"))?;
 
     if let Some(tmpl) = tool_obj.get("tool_call_template") {
-        Ok(Some(call_template_to_provider(tmpl.clone())?))
+        Ok(Some(
+            call_templates::call_template_to_provider(tmpl.clone())?,
+        ))
     } else if let Some(prov) = tool_obj.get("provider") {
-        Ok(Some(call_template_to_provider(prov.clone())?))
+        Ok(Some(
+            call_templates::call_template_to_provider(prov.clone())?,
+        ))
     } else {
         Ok(None)
     }
-}
-
-/// Convert a v1.0 call template into a v0.1-style provider Value.
-fn call_template_to_provider(mut template: Value) -> Result<Value> {
-    let obj = template
-        .as_object_mut()
-        .ok_or_else(|| anyhow!("call template must be an object"))?;
-
-    let ctype = obj
-        .get("call_template_type")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("Missing call_template_type"))?
-        .to_string();
-
-    // Normalize name
-    let name = obj
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&ctype)
-        .to_string();
-    obj.entry("name").or_insert(Value::String(name.clone()));
-
-    // Map call_template_type to provider_type
-    obj.insert("provider_type".to_string(), Value::String(ctype.clone()));
-    obj.insert("type".to_string(), Value::String(ctype.clone()));
-
-    // Normalize HTTP fields
-    if ctype == "http" {
-        if let Some(method) = obj.remove("method").or_else(|| obj.remove("http_method")) {
-            obj.insert("http_method".to_string(), method);
-        }
-        if !obj.contains_key("http_method") {
-            obj.insert("http_method".to_string(), Value::String("GET".to_string()));
-        }
-        if let Some(body_field) = obj.remove("body_field") {
-            obj.insert("body_field".to_string(), body_field);
-        }
-        if let Some(headers) = obj.remove("headers") {
-            obj.insert("headers".to_string(), headers);
-        }
-        if let Some(url) = obj.remove("url") {
-            obj.insert("url".to_string(), url);
-        }
-        if !obj.contains_key("url") {
-            obj.insert(
-                "url".to_string(),
-                Value::String("http://localhost".to_string()),
-            );
-        }
-    }
-
-    // Normalize CLI fields
-    if ctype == "cli" {
-        if let Some(cmd) = obj.remove("command") {
-            obj.insert("command_name".to_string(), cmd);
-        } else if let Some(commands) = obj.get("commands").and_then(|v| v.as_array()) {
-            // Best effort: join multi-command template
-            let first = commands
-                .get(0)
-                .and_then(|c| c.get("command"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("bash -c \"\"");
-            obj.insert("command_name".to_string(), Value::String(first.to_string()));
-        }
-        if let Some(env) = obj.remove("env_vars") {
-            obj.insert("env_vars".to_string(), env);
-        }
-        if let Some(cwd) = obj.remove("working_dir") {
-            obj.insert("working_dir".to_string(), cwd);
-        }
-    }
-
-    Ok(Value::Object(obj.clone()))
 }
 
 fn create_provider_from_value(mut value: Value, index: usize) -> Result<Arc<dyn Provider>> {
