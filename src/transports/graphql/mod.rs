@@ -62,6 +62,31 @@ impl GraphQLTransport {
         "query".to_string()
     }
 
+    fn normalize_arg_value(key: &str, value: Value) -> (String, Value) {
+        match value {
+            Value::Bool(_) => ("Boolean!".to_string(), value),
+            Value::Number(num) => {
+                if let Some(int_val) = num.as_i64() {
+                    if int_val >= i64::from(i32::MIN) && int_val <= i64::from(i32::MAX) {
+                        return ("Int!".to_string(), Value::Number(num));
+                    }
+                }
+                ("Float!".to_string(), Value::Number(num))
+            }
+            Value::String(s) => {
+                let maybe_id = key.to_ascii_lowercase().ends_with("_id");
+                let type_name = if maybe_id { "ID!" } else { "String!" };
+                (type_name.to_string(), Value::String(s))
+            }
+            Value::Array(_) | Value::Object(_) => {
+                // Serialize complex values as JSON strings for portability.
+                let serialized = value.to_string();
+                ("String!".to_string(), Value::String(serialized))
+            }
+            Value::Null => ("String".to_string(), Value::Null),
+        }
+    }
+
     fn apply_auth(
         &self,
         builder: reqwest::RequestBuilder,
@@ -217,9 +242,13 @@ impl ClientTransport for GraphQLTransport {
         // Use simple variable typing (String) for portability.
         let mut arg_defs = Vec::new();
         let mut arg_uses = Vec::new();
-        for key in args.keys() {
-            arg_defs.push(format!("${}: String", key));
+        let mut variables = HashMap::new();
+
+        for (key, value) in args {
+            let (type_name, normalized_value) = Self::normalize_arg_value(&key, value);
+            arg_defs.push(format!("${}: {}", key, type_name));
             arg_uses.push(format!("{}: ${}", key, key));
+            variables.insert(key, normalized_value);
         }
 
         let query = if !arg_defs.is_empty() {
@@ -235,7 +264,7 @@ impl ClientTransport for GraphQLTransport {
             format!("{} {{ {} }}", operation_type, tool_name)
         };
 
-        self.execute_query(gql_prov, &query, args).await
+        self.execute_query(gql_prov, &query, variables).await
     }
 
     async fn call_tool_stream(
@@ -259,16 +288,61 @@ mod tests {
 
     #[test]
     fn infer_operation_prefers_explicit_value() {
-        assert_eq!(GraphQLTransport::infer_operation("Mutation", "getUser"), "mutation");
-        assert_eq!(GraphQLTransport::infer_operation("subscription", "createUser"), "subscription");
-        assert_eq!(GraphQLTransport::infer_operation("QUERY", "deleteUser"), "query");
+        assert_eq!(
+            GraphQLTransport::infer_operation("Mutation", "getUser"),
+            "mutation"
+        );
+        assert_eq!(
+            GraphQLTransport::infer_operation("subscription", "createUser"),
+            "subscription"
+        );
+        assert_eq!(
+            GraphQLTransport::infer_operation("QUERY", "deleteUser"),
+            "query"
+        );
     }
 
     #[test]
     fn infer_operation_derives_from_tool_name_when_unspecified() {
-        assert_eq!(GraphQLTransport::infer_operation("", "subscription_changes"), "subscription");
-        assert_eq!(GraphQLTransport::infer_operation("unknown", "createItem"), "mutation");
-        assert_eq!(GraphQLTransport::infer_operation("  ", "listItems"), "query");
+        assert_eq!(
+            GraphQLTransport::infer_operation("", "subscription_changes"),
+            "subscription"
+        );
+        assert_eq!(
+            GraphQLTransport::infer_operation("unknown", "createItem"),
+            "mutation"
+        );
+        assert_eq!(
+            GraphQLTransport::infer_operation("  ", "listItems"),
+            "query"
+        );
+    }
+
+    #[test]
+    fn normalize_arg_value_maps_rust_types_to_graphql_scalars() {
+        let (ty, value) =
+            GraphQLTransport::normalize_arg_value("user_id", Value::String("abc".into()));
+        assert_eq!(ty, "ID!");
+        assert_eq!(value, Value::String("abc".into()));
+
+        let (ty, value) = GraphQLTransport::normalize_arg_value("count", Value::Number(3.into()));
+        assert_eq!(ty, "Int!");
+        assert_eq!(value, Value::Number(3.into()));
+
+        let (ty, value) = GraphQLTransport::normalize_arg_value(
+            "price",
+            Value::Number(serde_json::Number::from_f64(1.5).unwrap()),
+        );
+        assert_eq!(ty, "Float!");
+        assert_eq!(
+            value,
+            Value::Number(serde_json::Number::from_f64(1.5).unwrap())
+        );
+
+        let (ty, value) =
+            GraphQLTransport::normalize_arg_value("flags", serde_json::json!({"a": 1}));
+        assert_eq!(ty, "String!");
+        assert_eq!(value, Value::String("{\"a\":1}".into()));
     }
 
     #[tokio::test]

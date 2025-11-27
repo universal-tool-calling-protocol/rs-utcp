@@ -23,7 +23,11 @@ pub struct OpenApiConverter {
 }
 
 impl OpenApiConverter {
-    pub fn new(openapi_spec: Value, spec_url: Option<String>, provider_name: Option<String>) -> Self {
+    pub fn new(
+        openapi_spec: Value,
+        spec_url: Option<String>,
+        provider_name: Option<String>,
+    ) -> Self {
         let provider_name = provider_name
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| derive_provider_name(&openapi_spec));
@@ -136,9 +140,11 @@ impl OpenApiConverter {
                 }
                 Value::Object(out)
             }
-            Value::Array(arr) => {
-                Value::Array(arr.into_iter().map(|item| self.resolve_schema(item)).collect())
-            }
+            Value::Array(arr) => Value::Array(
+                arr.into_iter()
+                    .map(|item| self.resolve_schema(item))
+                    .collect(),
+            ),
             other => other,
         }
     }
@@ -176,8 +182,9 @@ impl OpenApiConverter {
 
     fn get_security_schemes(&self) -> Option<Map<String, Value>> {
         if let Some(components) = self.spec.get("components").and_then(|v| v.as_object()) {
-            if let Some(security_schemes) =
-                components.get("securitySchemes").and_then(|v| v.as_object())
+            if let Some(security_schemes) = components
+                .get("securitySchemes")
+                .and_then(|v| v.as_object())
             {
                 return Some(security_schemes.clone());
             }
@@ -240,8 +247,14 @@ impl OpenApiConverter {
                     "basic" => {
                         let auth = BasicAuth {
                             auth_type: AuthType::Basic,
-                            username: format!("${{{}_USERNAME}}", self.provider_name.to_uppercase()),
-                            password: format!("${{{}_PASSWORD}}", self.provider_name.to_uppercase()),
+                            username: format!(
+                                "${{{}_USERNAME}}",
+                                self.provider_name.to_uppercase()
+                            ),
+                            password: format!(
+                                "${{{}_PASSWORD}}",
+                                self.provider_name.to_uppercase()
+                            ),
                         };
                         Some(AuthConfig::Basic(auth))
                     }
@@ -296,10 +309,7 @@ impl OpenApiConverter {
                     let auth = OAuth2Auth {
                         auth_type: AuthType::OAuth2,
                         token_url: token_url.to_string(),
-                        client_id: format!(
-                            "${{{}_CLIENT_ID}}",
-                            self.provider_name.to_uppercase()
-                        ),
+                        client_id: format!("${{{}_CLIENT_ID}}", self.provider_name.to_uppercase()),
                         client_secret: format!(
                             "${{{}_CLIENT_SECRET}}",
                             self.provider_name.to_uppercase()
@@ -457,7 +467,9 @@ impl OpenApiConverter {
             let rb = self.resolve_schema(request_body.clone());
             if let Some(rb_obj) = rb.as_object() {
                 if let Some(content) = rb_obj.get("content").and_then(|v| v.as_object()) {
-                    if let Some(app_json) = content.get("application/json").and_then(|v| v.as_object()) {
+                    if let Some(app_json) =
+                        content.get("application/json").and_then(|v| v.as_object())
+                    {
                         if let Some(schema) = app_json.get("schema") {
                             let name = "body".to_string();
                             body_field = Some(name.clone());
@@ -471,7 +483,10 @@ impl OpenApiConverter {
                                 entry.insert(k, v);
                             }
                             if !entry.contains_key("type") {
-                                entry.insert("type".to_string(), Value::String("object".to_string()));
+                                entry.insert(
+                                    "type".to_string(),
+                                    Value::String("object".to_string()),
+                                );
                             }
                             props.insert(name.clone(), Value::Object(entry));
                             if rb_obj
@@ -489,11 +504,7 @@ impl OpenApiConverter {
 
         let schema = ToolInputOutputSchema {
             type_: "object".to_string(),
-            properties: if props.is_empty() {
-                None
-            } else {
-                Some(props)
-            },
+            properties: if props.is_empty() { None } else { Some(props) },
             required: if required.is_empty() {
                 None
             } else {
@@ -541,7 +552,8 @@ impl OpenApiConverter {
         let resp = self.resolve_schema(resp);
         if let Some(resp_obj) = resp.as_object() {
             if let Some(content) = resp_obj.get("content").and_then(|v| v.as_object()) {
-                if let Some(app_json) = content.get("application/json").and_then(|v| v.as_object()) {
+                if let Some(app_json) = content.get("application/json").and_then(|v| v.as_object())
+                {
                     if let Some(schema) = app_json.get("schema") {
                         let fallback = resp_obj
                             .get("description")
@@ -592,9 +604,7 @@ impl OpenApiConverter {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string()),
             items: None,
-            enum_: map
-                .get("enum")
-                .and_then(|v| interface_slice(v)),
+            enum_: map.get("enum").and_then(|v| interface_slice(v)),
             minimum: cast_float(map.get("minimum")),
             maximum: cast_float(map.get("maximum")),
             format: map
@@ -625,8 +635,8 @@ pub async fn load_spec_from_url(raw_url: &str) -> Result<(Value, String)> {
         return Ok((json_spec, final_url));
     }
 
-    let yaml_value: serde_yaml::Value =
-        serde_yaml::from_slice(&bytes).map_err(|err| anyhow!("failed to parse as JSON or YAML: {}", err))?;
+    let yaml_value: serde_yaml::Value = serde_yaml::from_slice(&bytes)
+        .map_err(|err| anyhow!("failed to parse as JSON or YAML: {}", err))?;
     let json_value = serde_json::to_value(yaml_value)?;
     Ok((json_value, final_url))
 }
@@ -759,10 +769,7 @@ mod tests {
     fn resolve_ref_and_schema() {
         let converter = build_test_converter();
         let obj = converter.resolve_ref("#/components/schemas/Obj").unwrap();
-        assert_eq!(
-            obj.get("type").and_then(|v| v.as_str()),
-            Some("object")
-        );
+        assert_eq!(obj.get("type").and_then(|v| v.as_str()), Some("object"));
         assert!(converter.resolve_ref("#/bad/ref").is_err());
 
         let resolved = converter.resolve_schema(json!({"$ref": "#/components/schemas/Obj"}));
@@ -781,7 +788,9 @@ mod tests {
         let converter = build_test_converter();
         let api_key = converter
             .create_auth_from_scheme(
-                &json!({"type": "apiKey", "in": "header", "name": "X"}).as_object().unwrap(),
+                &json!({"type": "apiKey", "in": "header", "name": "X"})
+                    .as_object()
+                    .unwrap(),
             )
             .unwrap();
         match api_key {
@@ -795,14 +804,18 @@ mod tests {
 
         let basic = converter
             .create_auth_from_scheme(
-                &json!({"type": "http", "scheme": "basic"}).as_object().unwrap(),
+                &json!({"type": "http", "scheme": "basic"})
+                    .as_object()
+                    .unwrap(),
             )
             .unwrap();
         matches!(basic, AuthConfig::Basic(_));
 
         let bearer = converter
             .create_auth_from_scheme(
-                &json!({"type": "http", "scheme": "bearer"}).as_object().unwrap(),
+                &json!({"type": "http", "scheme": "bearer"})
+                    .as_object()
+                    .unwrap(),
             )
             .unwrap();
         match bearer {
@@ -814,10 +827,7 @@ mod tests {
         }
 
         let mut op = Map::new();
-        op.insert(
-            "security".to_string(),
-            json!([{"basicAuth": []}]),
-        );
+        op.insert("security".to_string(), json!([{"basicAuth": []}]));
         let auth = converter.extract_auth(&op).unwrap();
         matches!(auth, AuthConfig::Basic(_));
     }
@@ -867,10 +877,7 @@ mod tests {
 
         let out = converter.extract_outputs(&op);
         assert_eq!(out.type_, "object");
-        assert!(out
-            .properties
-            .unwrap()
-            .contains_key("ok"));
+        assert!(out.properties.unwrap().contains_key("ok"));
 
         let tool = converter
             .create_tool("/ping", "get", &op, "https://api.example.com")

@@ -36,11 +36,39 @@ impl SseTransport {
         }
     }
 
+    fn value_to_header(value: &Value) -> Option<String> {
+        match value {
+            Value::String(s) => Some(s.clone()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Bool(b) => Some(b.to_string()),
+            _ => None,
+        }
+    }
+
+    fn split_headers_from_args(
+        &self,
+        prov: &SseProvider,
+        mut args: HashMap<String, Value>,
+    ) -> (HashMap<String, String>, HashMap<String, Value>) {
+        let mut headers = HashMap::new();
+        if let Some(header_fields) = &prov.header_fields {
+            for field in header_fields {
+                if let Some(value) = args.remove(field) {
+                    if let Some(header_value) = Self::value_to_header(&value) {
+                        headers.insert(field.clone(), header_value);
+                    }
+                }
+            }
+        }
+        (headers, args)
+    }
+
     fn apply_headers(
         &self,
         request: reqwest::RequestBuilder,
         prov: &SseProvider,
         extra_accept: Option<&str>,
+        dynamic_headers: &HashMap<String, String>,
     ) -> reqwest::RequestBuilder {
         let mut builder = request;
         builder = builder.header("Accept", extra_accept.unwrap_or("application/json"));
@@ -48,6 +76,9 @@ impl SseTransport {
             for (k, v) in headers {
                 builder = builder.header(k, v);
             }
+        }
+        for (k, v) in dynamic_headers {
+            builder = builder.header(k, v);
         }
         builder
     }
@@ -172,7 +203,7 @@ impl ClientTransport for SseTransport {
             .client
             .get(&sse_prov.url)
             .header("Accept", "application/json");
-        request = self.apply_headers(request, sse_prov, None);
+        request = self.apply_headers(request, sse_prov, None, &HashMap::new());
         if let Some(auth) = &sse_prov.base.auth {
             request = self.apply_auth(request, auth)?;
         }
@@ -222,13 +253,14 @@ impl ClientTransport for SseTransport {
             .ok_or_else(|| anyhow!("Provider is not an SseProvider"))?;
 
         let url = format!("{}/{}", sse_prov.url.trim_end_matches('/'), tool_name);
-        let payload = self.build_payload(sse_prov, args);
+        let (header_args, payload_args) = self.split_headers_from_args(sse_prov, args);
+        let payload = self.build_payload(sse_prov, payload_args);
 
         let mut request = self
             .client
             .post(url)
             .header("Content-Type", "application/json");
-        request = self.apply_headers(request, sse_prov, Some("text/event-stream"));
+        request = self.apply_headers(request, sse_prov, Some("text/event-stream"), &header_args);
         if let Some(auth) = &sse_prov.base.auth {
             request = self.apply_auth(request, auth)?;
         }
@@ -273,7 +305,8 @@ mod tests {
         let payload = transport.build_payload(&prov, args.clone());
         assert_eq!(payload, json!({ "data": args }));
 
-        let prov_no_field = SseProvider::new("sse".to_string(), "http://example.com".to_string(), None);
+        let prov_no_field =
+            SseProvider::new("sse".to_string(), "http://example.com".to_string(), None);
         let payload = transport.build_payload(&prov_no_field, args.clone());
         assert_eq!(payload, json!(args));
     }
@@ -288,10 +321,7 @@ mod tests {
                 auth: None,
             },
             url: "http://example.com".to_string(),
-            headers: Some(HashMap::from([(
-                "X-Test".to_string(),
-                "123".to_string(),
-            )])),
+            headers: Some(HashMap::from([("X-Test".to_string(), "123".to_string())])),
             body_field: None,
             header_fields: None,
         };
@@ -301,6 +331,7 @@ mod tests {
                 reqwest::Client::new().get("http://example.com"),
                 &prov,
                 Some("text/event-stream"),
+                &HashMap::new(),
             )
             .build()
             .unwrap();
@@ -331,6 +362,33 @@ mod tests {
         assert_eq!(tools[0].name, "stream-tool");
     }
 
+    #[test]
+    fn header_fields_move_args_into_headers() {
+        let transport = SseTransport::new();
+        let prov = SseProvider {
+            base: BaseProvider {
+                name: "sse".to_string(),
+                provider_type: ProviderType::Sse,
+                auth: None,
+            },
+            url: "http://example.com".to_string(),
+            headers: None,
+            body_field: None,
+            header_fields: Some(vec!["X-Token".into(), "trace".into()]),
+        };
+
+        let mut args = HashMap::new();
+        args.insert("X-Token".into(), json!("abc"));
+        args.insert("trace".into(), json!(123));
+        args.insert("message".into(), json!("hi"));
+
+        let (headers, remaining) = transport.split_headers_from_args(&prov, args);
+        assert_eq!(headers.get("X-Token").map(|s| s.as_str()), Some("abc"));
+        assert_eq!(headers.get("trace").map(|s| s.as_str()), Some("123"));
+        assert!(remaining.contains_key("message"));
+        assert!(!remaining.contains_key("trace"));
+    }
+
     #[tokio::test]
     async fn register_call_and_stream_sse_transport() {
         async fn manifest() -> Json<Value> {
@@ -345,11 +403,18 @@ mod tests {
             }))
         }
 
-        async fn sse_handler(Json(_payload): Json<Value>) -> Response<Body> {
+        async fn sse_handler(
+            headers: axum::http::HeaderMap,
+            Json(payload): Json<Value>,
+        ) -> Response<Body> {
+            assert_eq!(payload.get("msg").and_then(|v| v.as_str()), Some("hello"));
+            assert!(
+                payload.get("X-Trace").is_none(),
+                "header field should be stripped from payload"
+            );
+            assert_eq!(headers.get("x-trace").unwrap(), "trace-1");
             let stream = tokio_stream::iter(vec![
-                Ok::<Bytes, std::convert::Infallible>(Bytes::from_static(
-                    b"data: {\"idx\":1}\n\n",
-                )),
+                Ok::<Bytes, std::convert::Infallible>(Bytes::from_static(b"data: {\"idx\":1}\n\n")),
                 Ok(Bytes::from_static(b"data: {\"idx\":2}\n\n")),
             ]);
 
@@ -381,7 +446,7 @@ mod tests {
             url: format!("http://{}", addr),
             headers: None,
             body_field: None,
-            header_fields: None,
+            header_fields: Some(vec!["X-Trace".into()]),
         };
 
         let transport = SseTransport::new();
@@ -394,6 +459,7 @@ mod tests {
 
         let mut args = HashMap::new();
         args.insert("msg".into(), Value::String("hello".into()));
+        args.insert("X-Trace".into(), Value::String("trace-1".into()));
 
         let value = transport
             .call_tool("tool1", args.clone(), &prov)

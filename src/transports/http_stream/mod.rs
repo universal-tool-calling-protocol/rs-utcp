@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 use reqwest::{header, Client};
-use serde_json::Value;
+use serde_json::{de::Deserializer, Value};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -160,22 +160,56 @@ impl ClientTransport for StreamableHttpTransport {
         let (tx, rx) = mpsc::channel(16);
 
         tokio::spawn(async move {
+            let mut buffer: Vec<u8> = Vec::new();
             while let Some(chunk_result) = byte_stream.next().await {
                 match chunk_result {
                     Ok(bytes) => {
-                        let parsed = serde_json::from_slice::<Value>(&bytes)
-                            .map_err(|e| anyhow!("Failed to parse JSON from stream: {}", e));
-                        if tx.send(parsed).await.is_err() {
-                            break;
+                        buffer.extend_from_slice(&bytes);
+                        let deserializer = Deserializer::from_slice(&buffer);
+                        let mut stream = deserializer.into_iter::<Value>();
+                        let mut offset = 0usize;
+
+                        loop {
+                            match stream.next() {
+                                Some(Ok(value)) => {
+                                    offset = stream.byte_offset();
+                                    if tx.send(Ok(value)).await.is_err() {
+                                        return;
+                                    }
+                                }
+                                Some(Err(e)) => {
+                                    if e.is_eof() {
+                                        break;
+                                    }
+                                    let _ = tx
+                                        .send(Err(anyhow!(
+                                            "Failed to parse JSON from stream: {}",
+                                            e
+                                        )))
+                                        .await;
+                                    return;
+                                }
+                                None => break,
+                            }
+                        }
+
+                        if offset > 0 && offset <= buffer.len() {
+                            buffer.drain(0..offset);
                         }
                     }
                     Err(err) => {
                         let _ = tx
                             .send(Err(anyhow!("Error reading bytes from stream: {}", err)))
                             .await;
-                        break;
+                        return;
                     }
                 }
+            }
+
+            if !buffer.is_empty() {
+                let _ = tx
+                    .send(Err(anyhow!("Stream ended with incomplete JSON frame")))
+                    .await;
             }
         });
 
@@ -205,14 +239,14 @@ mod tests {
             location: "header".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &header_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &header_auth,
+            )
             .unwrap()
             .build()
             .unwrap();
-        assert_eq!(
-            request.headers().get("X-Stream-Key").unwrap(),
-            "secret"
-        );
+        assert_eq!(request.headers().get("X-Stream-Key").unwrap(), "secret");
 
         let query_auth = AuthConfig::ApiKey(ApiKeyAuth {
             auth_type: AuthType::ApiKey,
@@ -221,7 +255,10 @@ mod tests {
             location: "query".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &query_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &query_auth,
+            )
             .unwrap()
             .build()
             .unwrap();
@@ -233,7 +270,10 @@ mod tests {
             password: "pass".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &basic_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &basic_auth,
+            )
             .unwrap()
             .build()
             .unwrap();
@@ -268,8 +308,9 @@ mod tests {
 
         async fn stream(Json(_payload): Json<Value>) -> Response<Body> {
             let chunks: Vec<Result<Bytes, std::convert::Infallible>> = vec![
-                Ok(Bytes::from_static(br#"{"chunk":1}"#)),
-                Ok(Bytes::from_static(br#"{"chunk":2}"#)),
+                Ok(Bytes::from_static(br#"{"chunk":"#)),
+                Ok(Bytes::from_static(br#"1}"#)),
+                Ok(Bytes::from_static(b"\n{\"chunk\":2}")),
             ];
             Response::builder()
                 .header("content-type", "application/json")

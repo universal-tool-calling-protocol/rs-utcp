@@ -118,18 +118,18 @@ impl CodeModeUtcp {
                 })?;
                 let args = value_to_map(args_val)?;
 
-                let mut stream = block_on_any_runtime(async {
-                    client.call_tool_stream(name, args).await
-                })
-                .map_err(|e| {
-                    EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
-                })?;
+                let mut stream =
+                    block_on_any_runtime(async { client.call_tool_stream(name, args).await })
+                        .map_err(|e| {
+                            EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                        })?;
 
                 let mut items = Vec::new();
                 loop {
-                    let next = block_on_any_runtime(async { stream.next().await }).map_err(|e| {
-                        EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
-                    })?;
+                    let next =
+                        block_on_any_runtime(async { stream.next().await }).map_err(|e| {
+                            EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
+                        })?;
                     match next {
                         Some(value) => items.push(value),
                         None => break,
@@ -137,10 +137,11 @@ impl CodeModeUtcp {
                 }
 
                 if let Err(e) = block_on_any_runtime(async { stream.close().await }) {
-                    return Err(
-                        EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
-                            .into(),
-                    );
+                    return Err(EvalAltResult::ErrorRuntime(
+                        e.to_string().into(),
+                        rhai::Position::NONE,
+                    )
+                    .into());
                 }
 
                 Ok(rhai::serde::to_dynamic(items).map_err(|e| {
@@ -275,11 +276,7 @@ impl CodemodeOrchestrator {
             match tool.inputs.properties.as_ref() {
                 Some(props) if !props.is_empty() => {
                     for (key, schema) in props {
-                        rendered.push_str(&format!(
-                            "  - {}: {}\n",
-                            key,
-                            schema_type_hint(schema)
-                        ));
+                        rendered.push_str(&format!("  - {}: {}\n", key, schema_type_hint(schema)));
                     }
                 }
                 _ => rendered.push_str("  - none\n"),
@@ -298,11 +295,7 @@ impl CodemodeOrchestrator {
             match tool.outputs.properties.as_ref() {
                 Some(props) if !props.is_empty() => {
                     for (key, schema) in props {
-                        rendered.push_str(&format!(
-                            "  - {}: {}\n",
-                            key,
-                            schema_type_hint(schema)
-                        ));
+                        rendered.push_str(&format!("  - {}: {}\n", key, schema_type_hint(schema)));
                     }
                 }
                 _ => {

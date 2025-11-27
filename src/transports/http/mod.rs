@@ -223,7 +223,10 @@ mod tests {
             location: "header".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &header_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &header_auth,
+            )
             .unwrap()
             .build()
             .unwrap();
@@ -237,7 +240,10 @@ mod tests {
             location: "query".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &query_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &query_auth,
+            )
             .unwrap()
             .build()
             .unwrap();
@@ -251,7 +257,10 @@ mod tests {
             location: "cookie".to_string(),
         });
         let request = transport
-            .apply_auth(reqwest::Client::new().get("http://example.com"), &cookie_auth)
+            .apply_auth(
+                reqwest::Client::new().get("http://example.com"),
+                &cookie_auth,
+            )
             .unwrap()
             .build()
             .unwrap();

@@ -16,26 +16,26 @@ pub struct IceServer {
 pub struct WebRtcProvider {
     #[serde(flatten)]
     pub base: BaseProvider,
-    
+
     /// Signaling server URL (WebSocket or HTTP)
     pub signaling_server: String,
-    
+
     /// ICE servers (STUN/TURN)
     #[serde(default = "default_ice_servers")]
     pub ice_servers: Vec<IceServer>,
-    
+
     /// Data channel label
     #[serde(default = "default_channel_label")]
     pub channel_label: String,
-    
+
     /// Whether to use ordered delivery
     #[serde(default = "default_true")]
     pub ordered: bool,
-    
+
     /// Max packet lifetime in milliseconds (for unordered channels)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_packet_life_time: Option<u16>,
-    
+
     /// Max retransmits (for unordered channels)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_retransmits: Option<u16>,
@@ -109,7 +109,10 @@ mod tests {
         assert_eq!(provider.channel_label, "utcp-data");
         assert!(provider.ordered);
         assert_eq!(provider.ice_servers.len(), 1);
-        assert_eq!(provider.ice_servers[0].urls[0], "stun:stun.l.google.com:19302");
+        assert_eq!(
+            provider.ice_servers[0].urls[0],
+            "stun:stun.l.google.com:19302"
+        );
     }
 
     #[test]

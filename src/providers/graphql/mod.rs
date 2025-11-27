@@ -99,8 +99,11 @@ mod tests {
 
     #[test]
     fn graphql_provider_new_sets_defaults() {
-        let provider =
-            GraphqlProvider::new("new-graphql".to_string(), "https://example.com/graphql".to_string(), None);
+        let provider = GraphqlProvider::new(
+            "new-graphql".to_string(),
+            "https://example.com/graphql".to_string(),
+            None,
+        );
 
         assert_eq!(provider.base.provider_type, ProviderType::Graphql);
         assert_eq!(provider.operation_type, "query");

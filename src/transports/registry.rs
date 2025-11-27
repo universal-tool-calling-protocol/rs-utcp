@@ -18,13 +18,19 @@ impl TransportRegistry {
 
     pub fn with_default_transports() -> Self {
         let mut reg = Self::new();
-        reg.register("http", Arc::new(crate::transports::http::HttpClientTransport::new()));
+        reg.register(
+            "http",
+            Arc::new(crate::transports::http::HttpClientTransport::new()),
+        );
         reg.register("cli", Arc::new(crate::transports::cli::CliTransport::new()));
         reg.register(
             "websocket",
             Arc::new(crate::transports::websocket::WebSocketTransport::new()),
         );
-        reg.register("grpc", Arc::new(crate::transports::grpc::GrpcTransport::new()));
+        reg.register(
+            "grpc",
+            Arc::new(crate::transports::grpc::GrpcTransport::new()),
+        );
         reg.register(
             "graphql",
             Arc::new(crate::transports::graphql::GraphQLTransport::new()),
@@ -41,7 +47,10 @@ impl TransportRegistry {
             "http_stream",
             Arc::new(crate::transports::http_stream::StreamableHttpTransport::new()),
         );
-        reg.register("text", Arc::new(crate::transports::text::TextTransport::new()));
+        reg.register(
+            "text",
+            Arc::new(crate::transports::text::TextTransport::new()),
+        );
         reg
     }
 

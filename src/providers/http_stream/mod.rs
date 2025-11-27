@@ -93,8 +93,11 @@ mod tests {
 
     #[test]
     fn streamable_http_provider_new_sets_defaults() {
-        let provider =
-            StreamableHttpProvider::new("new-http-stream".to_string(), "https://example.com".to_string(), None);
+        let provider = StreamableHttpProvider::new(
+            "new-http-stream".to_string(),
+            "https://example.com".to_string(),
+            None,
+        );
 
         assert_eq!(provider.base.provider_type, ProviderType::HttpStream);
         assert_eq!(provider.http_method, "POST");

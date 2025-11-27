@@ -68,10 +68,10 @@ impl CliTransport {
 
         // Write stdin if provided
         if let Some(input) = stdin_input {
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(input.as_bytes()).await?;
-            drop(stdin); // Close stdin
-        }
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(input.as_bytes()).await?;
+                drop(stdin); // Close stdin
+            }
         }
 
         // Wait for completion with timeout

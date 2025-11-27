@@ -72,11 +72,7 @@ mod tests {
 
     #[test]
     fn text_provider_new_sets_fields() {
-        let provider = TextProvider::new(
-            "new-text".to_string(),
-            Some("/opt/text".into()),
-            None
-        );
+        let provider = TextProvider::new("new-text".to_string(), Some("/opt/text".into()), None);
 
         assert_eq!(provider.base.name, "new-text");
         assert_eq!(provider.base.provider_type, ProviderType::Text);

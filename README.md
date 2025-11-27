@@ -132,17 +132,13 @@ rs-utcp supports a comprehensive range of transport protocols, each with full as
 | **WebRTC** | P2P data channels with signaling | ✅ Stable | ✅ |
 | **WebSocket** | Real-time bidirectional communication | ✅ Stable | ✅ |
 | **CLI** | Execute local binaries as tools | ✅ Stable | ❌ |
-
-### Experimental Transports
-
-| Transport | Description | Status | Streaming |
-|-----------|-------------|--------|-----------|
-| **gRPC** | High-performance RPC | 🚧 Beta | ✅ |
-| **GraphQL** | Query-based tool calling | 🚧 Beta | ❌ |
-| **SSE** | Server-Sent Events | 🚧 Beta | ✅ |
-| **HTTP Streams** | Streaming HTTP responses | 🚧 Beta | ✅ |
-| **TCP/UDP** | Low-level network protocols | 🚧 Beta | ❌ |
-| **Text** | File-based tool providers | 🚧 Beta | ❌ |
+| **gRPC** | High-performance RPC with TLS & auth metadata | ✅ Stable | ✅ |
+| **GraphQL** | Query-based tool calling with type-aware variables | ✅ Stable | ❌ |
+| **SSE** | Server-Sent Events | ✅ Stable | ✅ |
+| **HTTP Streams** | Streaming HTTP responses | ✅ Stable | ✅ |
+| **TCP** | Low-level socket transport (framed JSON) | ✅ Stable | ✅ |
+| **UDP** | Low-level datagram transport | ✅ Stable | ❌ |
+| **Text** | File-based tool providers (JS/SH/Python/exe) | ✅ Stable | ❌ |
 
 ## 💡 Examples
 
