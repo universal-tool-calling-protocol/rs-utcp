@@ -105,3 +105,118 @@ pub fn communication_protocols_snapshot() -> CommunicationProtocolRegistry {
         .expect("communication protocol registry poisoned")
         .clone()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::base::ProviderType;
+    use crate::transports::stream::boxed_vec_stream;
+    use crate::transports::CommunicationProtocol;
+    use async_trait::async_trait;
+    use serde_json::Value;
+
+    #[derive(Debug)]
+    struct DummyProtocol;
+
+    #[async_trait]
+    impl CommunicationProtocol for DummyProtocol {
+        async fn register_tool_provider(
+            &self,
+            _prov: &dyn crate::providers::base::Provider,
+        ) -> anyhow::Result<Vec<crate::tools::Tool>> {
+            Ok(vec![])
+        }
+
+        async fn deregister_tool_provider(
+            &self,
+            _prov: &dyn crate::providers::base::Provider,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn call_tool(
+            &self,
+            _tool_name: &str,
+            _args: HashMap<String, Value>,
+            _prov: &dyn crate::providers::base::Provider,
+        ) -> anyhow::Result<Value> {
+            Ok(Value::Null)
+        }
+
+        async fn call_tool_stream(
+            &self,
+            _tool_name: &str,
+            _args: HashMap<String, Value>,
+            _prov: &dyn crate::providers::base::Provider,
+        ) -> anyhow::Result<Box<dyn crate::transports::stream::StreamResult>> {
+            Ok(boxed_vec_stream(vec![Value::Null]))
+        }
+    }
+
+    #[test]
+    fn default_protocol_registry_contains_all_builtins() {
+        let reg = CommunicationProtocolRegistry::with_default_protocols();
+        let expected = vec![
+            "http",
+            "cli",
+            "websocket",
+            "grpc",
+            "graphql",
+            "tcp",
+            "udp",
+            "sse",
+            "mcp",
+            "webrtc",
+            "http_stream",
+            "text",
+        ];
+        for key in &expected {
+            assert!(
+                reg.get(key).is_some(),
+                "missing built-in protocol {key}"
+            );
+        }
+        assert_eq!(reg.as_map().len(), expected.len());
+    }
+
+    #[test]
+    fn transport_alias_builds_default_protocols() {
+        let reg = TransportRegistry::with_default_transports();
+        // Reuse provider type keys to ensure mapping doesn't drift.
+        let provider_keys = vec![
+            ProviderType::Http,
+            ProviderType::Cli,
+            ProviderType::Websocket,
+            ProviderType::Grpc,
+            ProviderType::Graphql,
+            ProviderType::Tcp,
+            ProviderType::Udp,
+            ProviderType::Sse,
+            ProviderType::Mcp,
+            ProviderType::Webrtc,
+            ProviderType::HttpStream,
+            ProviderType::Text,
+        ]
+        .into_iter()
+        .map(|p| p.as_key().to_string())
+        .collect::<Vec<_>>();
+
+        for key in provider_keys {
+            assert!(reg.get(&key).is_some(), "missing protocol for {key}");
+        }
+    }
+
+    #[test]
+    fn register_global_protocol_exposes_it_in_snapshot() {
+        let key = "dummy_protocol_test";
+        register_communication_protocol(key, Arc::new(DummyProtocol));
+
+        let snapshot = communication_protocols_snapshot();
+        assert!(snapshot.get(key).is_some(), "global registry missing {key}");
+
+        // Clean up to avoid leaking state between tests.
+        if let Ok(mut guard) = GLOBAL_COMMUNICATION_PROTOCOLS.write() {
+            guard.map.remove(key);
+        }
+    }
+}

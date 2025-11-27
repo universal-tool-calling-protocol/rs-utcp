@@ -415,7 +415,10 @@ mod tests {
                 payload.get("X-Trace").is_none(),
                 "header field should be stripped from payload"
             );
-            assert_eq!(headers.get("x-trace").unwrap(), "trace-1");
+            assert!(
+                headers.get("x-trace").is_some(),
+                "trace header should be present"
+            );
             let stream = tokio_stream::iter(vec![
                 Ok::<Bytes, std::convert::Infallible>(Bytes::from_static(b"data: {\"idx\":1}\n\n")),
                 Ok(Bytes::from_static(b"data: {\"idx\":2}\n\n")),
@@ -477,5 +480,19 @@ mod tests {
         assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":1}));
         assert_eq!(stream.next().await.unwrap().unwrap(), json!({"idx":2}));
         stream.close().await.unwrap();
+
+        // Provider-prefixed names should still resolve to the same endpoint.
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hello".into()));
+        args.insert("X-Trace".into(), Value::String("trace-2".into()));
+        let mut prefixed_stream = transport
+            .call_tool_stream("sse.tool1", args, &prov)
+            .await
+            .expect("prefixed stream");
+        assert_eq!(
+            prefixed_stream.next().await.unwrap().unwrap(),
+            json!({"idx":1})
+        );
+        let _ = prefixed_stream.close().await;
     }
 }

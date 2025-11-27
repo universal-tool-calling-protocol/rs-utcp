@@ -418,4 +418,59 @@ mod tests {
             .expect("stream error");
         assert!(err.to_string().contains("GraphQL subscriptions"));
     }
+
+    #[tokio::test]
+    async fn graphql_call_strips_provider_prefix() {
+        async fn handler(Json(body): Json<Value>) -> Json<Value> {
+            let query = body
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            assert!(query.contains("echo"));
+            assert!(
+                !query.contains("gql.echo"),
+                "provider prefix should be stripped before building query"
+            );
+            let vars = body
+                .get("variables")
+                .cloned()
+                .unwrap_or_else(|| json!({ "missing": true }));
+            Json(json!({ "data": { "echo": vars } }))
+        }
+
+        let app = Router::new().route("/graphql", post(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let prov = GraphqlProvider {
+            base: crate::providers::base::BaseProvider {
+                name: "gql".to_string(),
+                provider_type: crate::providers::base::ProviderType::Graphql,
+                auth: None,
+            },
+            url: format!("http://{}/graphql", addr),
+            operation_type: "query".to_string(),
+            operation_name: None,
+            headers: None,
+        };
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), json!("hi"));
+
+        let transport = GraphQLTransport::new();
+        let result = transport
+            .call_tool("gql.echo", args.clone(), &prov)
+            .await
+            .expect("call tool");
+
+        assert_eq!(result, json!({ "echo": json!({ "msg": "hi" }) }));
+    }
 }

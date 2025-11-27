@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Call template handler registry so plugins can register new `call_template_type` converters
 - Global communication protocol registry (`register_communication_protocol`) for pluggable protocols
+- Unit tests covering provider-prefix stripping for HTTP stream, SSE, WebSocket, and GraphQL protocols
 
 ### Changed
 - Transports renamed to communication protocols throughout the client API while keeping backward compatibility

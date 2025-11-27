@@ -292,7 +292,7 @@ mod tests {
     use serde_json::json;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     };
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
@@ -460,5 +460,90 @@ mod tests {
         assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 1 }));
         assert_eq!(stream.next().await.unwrap().unwrap(), json!({ "idx": 2 }));
         stream.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn websocket_strips_provider_prefix() {
+        use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen_paths = Arc::new(Mutex::new(Vec::new()));
+        let seen_paths_clone = seen_paths.clone();
+
+        tokio::spawn(async move {
+            for idx in 0..2 {
+                let (stream, _) = listener.accept().await.unwrap();
+                let seen_paths = seen_paths_clone.clone();
+                tokio::spawn(async move {
+                    let cb = |req: &Request, resp: Response| {
+                        if let Ok(mut guard) = seen_paths.lock() {
+                            guard.push(req.uri().path().to_string());
+                        }
+                        Ok(resp)
+                    };
+                    let mut ws = tokio_tungstenite::accept_hdr_async(stream, cb)
+                        .await
+                        .unwrap();
+
+                    if idx == 0 {
+                        if let Some(Ok(Message::Text(msg))) = ws.next().await {
+                            if msg == "manual" {
+                                let manifest = json!({
+                                    "tools": [{
+                                        "name": "echo",
+                                        "description": "echo tool",
+                                        "inputs": { "type": "object" },
+                                        "outputs": { "type": "object" },
+                                        "tags": []
+                                    }]
+                                });
+                                let _ = ws.send(Message::Text(manifest.to_string())).await;
+                            }
+                        }
+                    } else {
+                        if let Some(Ok(Message::Text(text))) = ws.next().await {
+                            let val: Value =
+                                serde_json::from_str(&text).unwrap_or_else(|_| Value::Null);
+                            let _ = ws
+                                .send(Message::Text(json!({ "echo": val }).to_string()))
+                                .await;
+                            let _ = ws.close(None).await;
+                        }
+                    }
+                });
+            }
+        });
+
+        let prov = WebSocketProvider {
+            base: BaseProvider {
+                name: "wsdemo".to_string(),
+                provider_type: ProviderType::Websocket,
+                auth: None,
+            },
+            url: format!("ws://{}/tools", addr),
+            protocol: None,
+            keep_alive: false,
+            headers: None,
+        };
+
+        let transport = WebSocketTransport::new();
+        let tools = transport
+            .register_tool_provider(&prov)
+            .await
+            .expect("register tools");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "echo");
+
+        let mut args = HashMap::new();
+        args.insert("msg".into(), Value::String("hi".into()));
+        let value = transport
+            .call_tool("wsdemo.echo", args.clone(), &prov)
+            .await
+            .expect("prefixed call");
+        assert_eq!(value, json!([json!({ "echo": json!(args) })]));
+
+        let paths = seen_paths.lock().unwrap().clone();
+        assert_eq!(paths, vec!["/tools".to_string(), "/echo".to_string()]);
     }
 }

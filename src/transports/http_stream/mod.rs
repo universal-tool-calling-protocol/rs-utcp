@@ -380,4 +380,41 @@ mod tests {
 
         assert_eq!(items, vec![json!({"chunk": 1}), json!({"chunk": 2})]);
     }
+
+    #[tokio::test]
+    async fn http_stream_strips_provider_prefix() {
+        async fn echo(Json(_payload): Json<Value>) -> Json<Value> {
+            Json(json!({"ok": true}))
+        }
+
+        let app = Router::new().route("/echo", post(echo));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+        });
+
+        let base_url = format!("http://{}", addr);
+        let provider = StreamableHttpProvider {
+            base: BaseProvider {
+                name: "http-stream".to_string(),
+                provider_type: ProviderType::HttpStream,
+                auth: None,
+            },
+            url: base_url.clone(),
+            http_method: "POST".to_string(),
+            headers: None,
+        };
+
+        let transport = StreamableHttpTransport::new();
+        let value = transport
+            .call_tool("http-stream.echo", HashMap::new(), &provider)
+            .await
+            .expect("call tool");
+        assert_eq!(value, json!({"ok": true}));
+    }
 }
