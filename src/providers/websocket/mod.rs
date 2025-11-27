@@ -84,6 +84,13 @@ mod tests {
         assert_eq!(provider.url, "wss://example.com/ws");
         assert_eq!(provider.protocol.as_deref(), Some("json-rpc"));
         assert!(provider.keep_alive);
-        assert_eq!(provider.headers.unwrap().get("Authorization").map(|s| s.as_str()), Some("Bearer token"));
+        assert_eq!(
+            provider
+                .headers
+                .unwrap()
+                .get("Authorization")
+                .map(|s| s.as_str()),
+            Some("Bearer token")
+        );
     }
 }

@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::time::Duration;
 use tokio::net::UdpSocket;
 
 use crate::providers::base::Provider;
@@ -65,7 +66,15 @@ impl ClientTransport for UdpTransport {
 
         // Send request and receive response
         let address = format!("{}:{}", udp_prov.host, udp_prov.port);
-        let response_bytes = self.send_and_receive(&address, &request_bytes).await?;
+        let response_bytes = if let Some(timeout) = udp_prov.timeout_ms {
+            tokio::time::timeout(
+                Duration::from_millis(timeout),
+                self.send_and_receive(&address, &request_bytes),
+            )
+            .await??
+        } else {
+            self.send_and_receive(&address, &request_bytes).await?
+        };
 
         // Parse response
         let result: Value = serde_json::from_slice(&response_bytes)?;
@@ -162,5 +171,28 @@ mod tests {
             .err()
             .expect("stream error");
         assert!(err.to_string().contains("Streaming not suitable for UDP"));
+    }
+
+    #[tokio::test]
+    async fn call_tool_respects_timeout_when_no_response() {
+        let prov = UdpProvider {
+            base: BaseProvider {
+                name: "udp-timeout".to_string(),
+                provider_type: ProviderType::Udp,
+                auth: None,
+            },
+            host: "127.0.0.1".to_string(),
+            port: 9, // discard port - we won't listen
+            timeout_ms: Some(30),
+        };
+
+        let err = UdpTransport::new()
+            .call_tool("noop", HashMap::new(), &prov)
+            .await
+            .expect_err("expected timeout");
+        assert!(
+            err.to_string().to_lowercase().contains("elapsed")
+                || err.to_string().to_lowercase().contains("timeout")
+        );
     }
 }

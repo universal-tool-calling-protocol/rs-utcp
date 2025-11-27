@@ -45,7 +45,10 @@ async fn main() -> Result<()> {
 
     println!("Prompt: {prompt}");
     match orchestrator.call_prompt(&prompt).await? {
-        Some(value) => println!("Orchestrator result:\n{}", serde_json::to_string_pretty(&value)?),
+        Some(value) => println!(
+            "Orchestrator result:\n{}",
+            serde_json::to_string_pretty(&value)?
+        ),
         None => println!("Model decided no tools were needed."),
     }
 
@@ -77,7 +80,8 @@ impl GeminiModel {
     fn from_env() -> Result<Self> {
         let api_key =
             std::env::var("GEMINI_API_KEY").map_err(|_| anyhow!("GEMINI_API_KEY is required"))?;
-        let model = std::env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-3-pro-preview".to_string());
+        let model =
+            std::env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-3-pro-preview".to_string());
         let endpoint = std::env::var("GEMINI_ENDPOINT")
             .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string());
         Ok(Self {

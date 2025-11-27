@@ -1,11 +1,11 @@
 pub mod auth;
 pub mod config;
-pub mod migration;
 pub mod errors;
 pub mod grpcpb;
 pub mod loader;
-pub mod plugins;
+pub mod migration;
 pub mod openapi;
+pub mod plugins;
 pub mod providers;
 pub mod repository;
 pub mod spec;
@@ -19,15 +19,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::errors::UtcpError;
 use crate::config::UtcpClientConfig;
+use crate::errors::UtcpError;
 use crate::openapi::OpenApiConverter;
 use crate::providers::base::{Provider, ProviderType};
 use crate::providers::http::HttpProvider;
 use crate::repository::ToolRepository;
 use crate::tools::{Tool, ToolSearchStrategy};
-use crate::transports::stream::StreamResult;
 use crate::transports::registry::TransportRegistry;
+use crate::transports::stream::StreamResult;
 use crate::transports::ClientTransport;
 
 #[async_trait]
@@ -99,15 +99,15 @@ impl UtcpClient {
 
         // Load providers if file path is specified
         if let Some(providers_path) = &client.config.providers_file_path {
-            let providers = crate::loader::load_providers_with_tools_from_file(
-                providers_path,
-                &client.config,
-            )
-            .await?;
+            let providers =
+                crate::loader::load_providers_with_tools_from_file(providers_path, &client.config)
+                    .await?;
 
             for loaded in providers {
                 let result = if let Some(tools) = loaded.tools {
-                    client.register_tool_provider_with_tools(loaded.provider.clone(), tools).await
+                    client
+                        .register_tool_provider_with_tools(loaded.provider.clone(), tools)
+                        .await
                 } else {
                     client.register_tool_provider(loaded.provider.clone()).await
                 };
@@ -148,9 +148,7 @@ impl UtcpClient {
         // Legacy qualified name flow
         if let Some((provider_name, suffix)) = tool_name.split_once('.') {
             if provider_name.is_empty() {
-                return Err(
-                    UtcpError::Config(format!("Invalid tool name: {}", tool_name)).into()
-                );
+                return Err(UtcpError::Config(format!("Invalid tool name: {}", tool_name)).into());
             }
 
             let prov = self
@@ -160,15 +158,15 @@ impl UtcpClient {
                 .ok_or_else(|| UtcpError::ToolNotFound(provider_name.to_string()))?;
             let provider_type = prov.type_();
 
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| {
-                UtcpError::Config(format!(
-                    "No transport found for provider type: {:?}",
-                    provider_type
-                ))
+            let transport_key = provider_type.as_key().to_string();
+            let transport = self
+                .transports
+                .get(&transport_key)
+                .ok_or_else(|| {
+                    UtcpError::Config(format!(
+                        "No transport found for provider type: {:?}",
+                        provider_type
+                    ))
                 })?
                 .clone();
 
@@ -236,7 +234,8 @@ impl UtcpClient {
 #[async_trait]
 impl UtcpClientInterface for UtcpClient {
     async fn register_tool_provider(&self, prov: Arc<dyn Provider>) -> Result<Vec<Tool>> {
-        self.register_tool_provider_with_tools(prov, Vec::new()).await
+        self.register_tool_provider_with_tools(prov, Vec::new())
+            .await
     }
 
     async fn register_tool_provider_with_tools(

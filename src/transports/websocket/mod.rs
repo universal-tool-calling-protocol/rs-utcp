@@ -353,10 +353,7 @@ mod tests {
             url: "ws://example.com/socket".to_string(),
             protocol: Some("json".to_string()),
             keep_alive: false,
-            headers: Some(HashMap::from([(
-                "X-Custom".to_string(),
-                "1".to_string(),
-            )])),
+            headers: Some(HashMap::from([("X-Custom".to_string(), "1".to_string())])),
         };
 
         let req = transport.build_request(&prov, &prov.url).unwrap();

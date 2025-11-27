@@ -119,7 +119,15 @@ mod tests {
         assert_eq!(provider.base.name, "test-mcp-stdio");
         assert_eq!(provider.command.as_deref(), Some("python"));
         assert_eq!(provider.args.as_ref().unwrap()[0], "server.py");
-        assert_eq!(provider.env_vars.as_ref().unwrap().get("DEBUG").map(|s| s.as_str()), Some("1"));
+        assert_eq!(
+            provider
+                .env_vars
+                .as_ref()
+                .unwrap()
+                .get("DEBUG")
+                .map(|s| s.as_str()),
+            Some("1")
+        );
         assert!(provider.is_stdio());
         assert!(!provider.is_http());
     }

@@ -97,7 +97,7 @@ impl WebRtcTransport {
     ) -> Result<RTCSessionDescription> {
         // Send offer to signaling server and get answer
         let client = reqwest::Client::new();
-        
+
         let mut request = client
             .post(&prov.signaling_server)
             .json(&serde_json::json!({
@@ -111,7 +111,7 @@ impl WebRtcTransport {
         }
 
         let response = request.send().await?;
-        
+
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Signaling server returned error: {}",
@@ -120,7 +120,7 @@ impl WebRtcTransport {
         }
 
         let answer_json: Value = response.json().await?;
-        
+
         let answer_sdp = answer_json
             .get("sdp")
             .and_then(|v| v.as_str())
@@ -148,9 +148,9 @@ impl WebRtcTransport {
             AuthConfig::Basic(basic) => {
                 Ok(builder.basic_auth(&basic.username, Some(&basic.password)))
             }
-            AuthConfig::OAuth2(_) => Err(anyhow!(
-                "OAuth2 auth not yet supported by WebRTC transport"
-            )),
+            AuthConfig::OAuth2(_) => {
+                Err(anyhow!("OAuth2 auth not yet supported by WebRTC transport"))
+            }
         }
     }
 
@@ -234,9 +234,10 @@ impl WebRtcTransport {
         data_channel.send(&request_bytes.into()).await?;
 
         // Wait for response with timeout
-        let response_result = tokio::time::timeout(std::time::Duration::from_secs(30), response_rx.recv())
-            .await
-            .map_err(|_| anyhow!("Timeout waiting for response"))?;
+        let response_result =
+            tokio::time::timeout(std::time::Duration::from_secs(30), response_rx.recv())
+                .await
+                .map_err(|_| anyhow!("Timeout waiting for response"))?;
 
         let response = match response_result {
             Some(Ok(value)) => value,
@@ -431,7 +432,12 @@ mod tests {
         let request = builder.build().unwrap();
 
         assert_eq!(
-            request.headers().get("X-API-Key").unwrap().to_str().unwrap(),
+            request
+                .headers()
+                .get("X-API-Key")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "secret"
         );
     }
@@ -469,7 +475,12 @@ mod tests {
         // Basic auth header is "Basic <base64(user:pass)>"
         // user:pass -> dXNlcjpwYXNz
         assert_eq!(
-            request.headers().get("Authorization").unwrap().to_str().unwrap(),
+            request
+                .headers()
+                .get("Authorization")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "Basic dXNlcjpwYXNz"
         );
     }

@@ -31,7 +31,8 @@ pub async fn load_providers_from_file(
     path: impl AsRef<Path>,
     config: &UtcpClientConfig,
 ) -> Result<Vec<Arc<dyn Provider>>> {
-    Ok(load_providers_with_tools_from_file(path, config).await?
+    Ok(load_providers_with_tools_from_file(path, config)
+        .await?
         .into_iter()
         .map(|p| p.provider)
         .collect())
@@ -69,8 +70,7 @@ pub async fn load_providers_with_tools_from_file(
             let _manual: ManualV1 = serde_json::from_value(json.clone())
                 .map_err(|e| anyhow!("Invalid v1.0 manual: {}", e))?;
 
-            let (providers, tools) =
-                parse_manual_tools_with_providers(json.clone(), config)?;
+            let (providers, tools) = parse_manual_tools_with_providers(json.clone(), config)?;
             return Ok(providers
                 .into_iter()
                 .zip(tools.into_iter())
@@ -191,7 +191,10 @@ fn parse_manual_tools_with_providers(
                     obj.insert("provider_type".to_string(), ct.clone());
                     obj.insert("type".to_string(), ct);
                 } else {
-                    obj.insert("provider_type".to_string(), Value::String("http".to_string()));
+                    obj.insert(
+                        "provider_type".to_string(),
+                        Value::String("http".to_string()),
+                    );
                     obj.insert("type".to_string(), Value::String("http".to_string()));
                 }
             }
@@ -251,10 +254,7 @@ fn call_template_to_provider(mut template: Value) -> Result<Value> {
     obj.entry("name").or_insert(Value::String(name.clone()));
 
     // Map call_template_type to provider_type
-    obj.insert(
-        "provider_type".to_string(),
-        Value::String(ctype.clone()),
-    );
+    obj.insert("provider_type".to_string(), Value::String(ctype.clone()));
     obj.insert("type".to_string(), Value::String(ctype.clone()));
 
     // Normalize HTTP fields
@@ -275,7 +275,10 @@ fn call_template_to_provider(mut template: Value) -> Result<Value> {
             obj.insert("url".to_string(), url);
         }
         if !obj.contains_key("url") {
-            obj.insert("url".to_string(), Value::String("http://localhost".to_string()));
+            obj.insert(
+                "url".to_string(),
+                Value::String("http://localhost".to_string()),
+            );
         }
     }
 
@@ -311,7 +314,10 @@ fn create_provider_from_value(mut value: Value, index: usize) -> Result<Arc<dyn 
             .ok_or_else(|| anyhow!("Provider must be an object"))?;
 
         if obj.get("provider_type").is_none() && obj.get("type").is_none() {
-            obj.insert("provider_type".to_string(), Value::String("http".to_string()));
+            obj.insert(
+                "provider_type".to_string(),
+                Value::String("http".to_string()),
+            );
             obj.insert("type".to_string(), Value::String("http".to_string()));
         }
 
@@ -351,7 +357,10 @@ fn create_provider_from_value(mut value: Value, index: usize) -> Result<Arc<dyn 
             }
             if !value.get("url").is_some() {
                 if let Some(obj) = value.as_object_mut() {
-                    obj.insert("url".to_string(), Value::String("http://localhost".to_string()));
+                    obj.insert(
+                        "url".to_string(),
+                        Value::String("http://localhost".to_string()),
+                    );
                 }
             }
             let provider: HttpProvider = serde_json::from_value(value)?;

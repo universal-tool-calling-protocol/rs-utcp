@@ -1,5 +1,5 @@
-use serde_json::{json, Map, Value};
 use anyhow::{anyhow, Result};
+use serde_json::{json, Map, Value};
 
 /// Best-effort migration of a v0.1 configuration object to the v1.0 shape.
 /// - providers -> manual_call_templates
@@ -56,8 +56,14 @@ pub fn migrate_v01_config(config: &Value) -> Value {
 /// - Moves provider -> tool_call_template (provider_type -> call_template_type)
 pub fn migrate_v01_manual(manual: &Value) -> Value {
     let mut out = Map::new();
-    out.insert("manual_version".to_string(), Value::String("1.0.0".to_string()));
-    out.insert("utcp_version".to_string(), Value::String("0.2.0".to_string()));
+    out.insert(
+        "manual_version".to_string(),
+        Value::String("1.0.0".to_string()),
+    );
+    out.insert(
+        "utcp_version".to_string(),
+        Value::String("0.2.0".to_string()),
+    );
 
     // Info block from provider_info if present
     if let Some(info) = manual.get("provider_info") {
@@ -84,9 +90,9 @@ pub fn migrate_v01_manual(manual: &Value) -> Value {
                     tool_obj.insert("inputs".to_string(), params);
                 }
                 // default outputs to object if missing
-                tool_obj.entry("outputs".to_string()).or_insert_with(|| {
-                    json!({"type": "object"})
-                });
+                tool_obj
+                    .entry("outputs".to_string())
+                    .or_insert_with(|| json!({"type": "object"}));
 
                 // provider -> tool_call_template
                 if let Some(provider) = tool_obj.remove("provider") {
@@ -98,10 +104,7 @@ pub fn migrate_v01_manual(manual: &Value) -> Value {
                         {
                             tmpl_obj.insert("call_template_type".to_string(), Value::String(ptype));
                         }
-                        tool_obj.insert(
-                            "tool_call_template".to_string(),
-                            Value::Object(tmpl_obj),
-                        );
+                        tool_obj.insert("tool_call_template".to_string(), Value::Object(tmpl_obj));
                     }
                 }
 

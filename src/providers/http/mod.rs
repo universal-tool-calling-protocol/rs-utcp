@@ -88,6 +88,13 @@ mod tests {
 
         let provider: HttpProvider = serde_json::from_value(json).unwrap();
         assert_eq!(provider.content_type.as_deref(), Some("application/xml"));
-        assert_eq!(provider.headers.unwrap().get("X-Custom").map(|s| s.as_str()), Some("value"));
+        assert_eq!(
+            provider
+                .headers
+                .unwrap()
+                .get("X-Custom")
+                .map(|s| s.as_str()),
+            Some("value")
+        );
     }
 }

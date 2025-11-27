@@ -81,7 +81,8 @@ mod tests {
 
     #[test]
     fn grpc_provider_new_sets_defaults() {
-        let provider = GrpcProvider::new("new-grpc".to_string(), "localhost".to_string(), 1234, None);
+        let provider =
+            GrpcProvider::new("new-grpc".to_string(), "localhost".to_string(), 1234, None);
 
         assert_eq!(provider.base.provider_type, ProviderType::Grpc);
         assert_eq!(provider.host, "localhost");

@@ -59,7 +59,7 @@ impl McpStdioProcess {
 
         // Use larger buffers for better I/O performance (64KB)
         let buf_reader = BufReader::with_capacity(65536, stdout);
-        
+
         Ok(Self {
             child,
             stdin: Arc::new(Mutex::new(stdin)),
@@ -132,7 +132,7 @@ impl McpTransport {
             .http2_adaptive_window(true)
             .build()
             .expect("Failed to build MCP HTTP client");
-            
+
         Self {
             client,
             stdio_processes: Arc::new(Mutex::new(HashMap::new())),
@@ -625,9 +625,7 @@ mod tests {
             );
 
             let stream = tokio_stream::iter(vec![
-                Ok::<_, std::convert::Infallible>(Bytes::from_static(
-                    b"data: {\"idx\":1}\n\n",
-                )),
+                Ok::<_, std::convert::Infallible>(Bytes::from_static(b"data: {\"idx\":1}\n\n")),
                 Ok(Bytes::from_static(b"data: {\"idx\":2}\n\n")),
             ]);
             (
@@ -676,7 +674,10 @@ mod tests {
             .call_tool("echo", args.clone(), &prov)
             .await
             .expect("call");
-        assert_eq!(call_value, json!({ "called": { "name": "echo", "arguments": json!(args) } }));
+        assert_eq!(
+            call_value,
+            json!({ "called": { "name": "echo", "arguments": json!(args) } })
+        );
 
         // Stream uses /stream endpoint
         let stream_prov = McpProvider {

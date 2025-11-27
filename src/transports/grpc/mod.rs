@@ -6,8 +6,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::sync::mpsc;
-use tonic::metadata::MetadataValue;
-use tonic::transport::{Channel, Endpoint};
+use tonic::metadata::{MetadataKey, MetadataValue};
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::Request;
 
 use crate::auth::AuthConfig;
@@ -45,11 +45,15 @@ impl GrpcTransport {
     }
 
     async fn connect(&self, prov: &GrpcProvider) -> Result<UtcpServiceClient<Channel>> {
+        let scheme = if prov.use_ssl { "https" } else { "http" };
+        let endpoint = format!("{}://{}:{}", scheme, prov.host, prov.port);
+
+        let mut endpoint = Endpoint::from_shared(endpoint)?;
         if prov.use_ssl {
-            return Err(anyhow!("TLS for gRPC transport is not configured yet"));
+            endpoint = endpoint.tls_config(ClientTlsConfig::new())?;
         }
-        let endpoint = format!("http://{}:{}", prov.host, prov.port);
-        let channel = Endpoint::from_shared(endpoint)?.connect().await?;
+
+        let channel = endpoint.connect().await?;
         Ok(UtcpServiceClient::new(channel))
     }
 
@@ -62,8 +66,20 @@ impl GrpcTransport {
                     let value = MetadataValue::from_str(&format!("Basic {}", basic))?;
                     req.metadata_mut().insert("authorization", value);
                 }
+                AuthConfig::ApiKey(api_key) => {
+                    if api_key.location.to_ascii_lowercase() != "header" {
+                        return Err(anyhow!(
+                            "gRPC API key auth only supports the 'header' location"
+                        ));
+                    }
+                    let key = MetadataKey::from_str(&api_key.var_name.to_ascii_lowercase())?;
+                    let value = MetadataValue::from_str(&api_key.api_key)?;
+                    req.metadata_mut().insert(key, value);
+                }
                 _ => {
-                    return Err(anyhow!("Only basic auth is supported for gRPC providers"));
+                    return Err(anyhow!(
+                        "Only basic and api key auth are supported for gRPC providers"
+                    ));
                 }
             }
         }
@@ -187,7 +203,7 @@ impl ClientTransport for GrpcTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth};
+    use crate::auth::{ApiKeyAuth, AuthType, BasicAuth, OAuth2Auth};
     use crate::providers::base::{BaseProvider, ProviderType};
     use serde_json::json;
     use tokio::net::TcpListener;
@@ -225,17 +241,41 @@ mod tests {
             "grpc".to_string(),
             "localhost".to_string(),
             50051,
-            Some(AuthConfig::ApiKey(ApiKeyAuth {
-                auth_type: AuthType::ApiKey,
-                api_key: "secret".to_string(),
-                var_name: "X-Api-Key".to_string(),
-                location: "header".to_string(),
+            Some(AuthConfig::OAuth2(OAuth2Auth {
+                auth_type: AuthType::OAuth2,
+                token_url: "https://example.com".to_string(),
+                client_id: "id".to_string(),
+                client_secret: "secret".to_string(),
+                scope: None,
             })),
         );
 
         let mut request: Request<()> = Request::new(());
         let err = transport.apply_auth(&prov, &mut request).unwrap_err();
-        assert!(err.to_string().contains("Only basic auth is supported"));
+        assert!(err
+            .to_string()
+            .contains("Only basic and api key auth are supported"));
+    }
+
+    #[test]
+    fn apply_auth_sets_api_key_header() {
+        let transport = GrpcTransport::new();
+        let prov = GrpcProvider::new(
+            "grpc".to_string(),
+            "localhost".to_string(),
+            50051,
+            Some(AuthConfig::ApiKey(ApiKeyAuth {
+                auth_type: AuthType::ApiKey,
+                api_key: "token".to_string(),
+                var_name: "x-api-key".to_string(),
+                location: "header".to_string(),
+            })),
+        );
+
+        let mut request: Request<()> = Request::new(());
+        transport.apply_auth(&prov, &mut request).unwrap();
+        let header = request.metadata().get("x-api-key").unwrap();
+        assert_eq!(header.to_str().unwrap(), "token");
     }
 
     #[derive(Default)]

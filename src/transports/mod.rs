@@ -4,6 +4,7 @@ pub mod grpc;
 pub mod http;
 pub mod http_stream;
 pub mod mcp;
+pub mod registry;
 pub mod sse;
 pub mod stream;
 pub mod tcp;
@@ -11,7 +12,6 @@ pub mod text;
 pub mod udp;
 pub mod webrtc;
 pub mod websocket;
-pub mod registry;
 
 use crate::providers::base::Provider;
 use crate::tools::Tool;

@@ -100,7 +100,11 @@ mod tests {
 
     #[test]
     fn sse_provider_new_sets_defaults() {
-        let provider = SseProvider::new("new-sse".to_string(), "http://localhost:8080/sse".to_string(), None);
+        let provider = SseProvider::new(
+            "new-sse".to_string(),
+            "http://localhost:8080/sse".to_string(),
+            None,
+        );
 
         assert_eq!(provider.base.provider_type, ProviderType::Sse);
         assert!(provider.headers.is_none());
