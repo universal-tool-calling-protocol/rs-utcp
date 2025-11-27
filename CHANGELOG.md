@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation refreshed to describe the new registries and plugin extension points
 - Dependency update: added `once_cell` for global registry initialization
 
+### Fixed
+- Strip provider prefixes when calling HTTP stream, SSE, WebSocket, and GraphQL protocols to avoid 404s (e.g., `http_stream_server` example)
+
 ## [0.1.8] - 2025-11-26
 
 ### Changed

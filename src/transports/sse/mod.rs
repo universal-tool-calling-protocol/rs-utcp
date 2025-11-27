@@ -252,7 +252,10 @@ impl ClientTransport for SseTransport {
             .downcast_ref::<SseProvider>()
             .ok_or_else(|| anyhow!("Provider is not an SseProvider"))?;
 
-        let url = format!("{}/{}", sse_prov.url.trim_end_matches('/'), tool_name);
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", sse_prov.base.name))
+            .unwrap_or(tool_name);
+        let url = format!("{}/{}", sse_prov.url.trim_end_matches('/'), call_name);
         let (header_args, payload_args) = self.split_headers_from_args(sse_prov, args);
         let payload = self.build_payload(sse_prov, payload_args);
 

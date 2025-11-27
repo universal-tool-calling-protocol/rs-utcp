@@ -80,7 +80,10 @@ impl ClientTransport for StreamableHttpTransport {
             .downcast_ref::<StreamableHttpProvider>()
             .ok_or_else(|| anyhow!("Provider is not a StreamableHttpProvider"))?;
 
-        let url = format!("{}/{}", http_prov.url.trim_end_matches('/'), tool_name);
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", http_prov.base.name))
+            .unwrap_or(tool_name);
+        let url = format!("{}/{}", http_prov.url.trim_end_matches('/'), call_name);
         let method_upper = http_prov.http_method.to_uppercase();
         let mut request_builder = match method_upper.as_str() {
             "GET" => self.client.get(&url).query(&args),
@@ -125,7 +128,10 @@ impl ClientTransport for StreamableHttpTransport {
             .downcast_ref::<StreamableHttpProvider>()
             .ok_or_else(|| anyhow!("Provider is not a StreamableHttpProvider"))?;
 
-        let url = format!("{}/{}", http_prov.url.trim_end_matches('/'), tool_name);
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", http_prov.base.name))
+            .unwrap_or(tool_name);
+        let url = format!("{}/{}", http_prov.url.trim_end_matches('/'), call_name);
         let method_upper = http_prov.http_method.to_uppercase();
         let mut req = match method_upper.as_str() {
             "GET" => self.client.get(url).query(&args),

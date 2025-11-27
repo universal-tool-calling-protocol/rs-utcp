@@ -181,11 +181,15 @@ impl ClientTransport for WebSocketTransport {
             .downcast_ref::<WebSocketProvider>()
             .ok_or_else(|| anyhow!("Provider is not a WebSocketProvider"))?;
 
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", ws_prov.base.name))
+            .unwrap_or(tool_name);
+
         let mut base_url = ws_prov.url.trim_end_matches('/').to_string();
         if base_url.ends_with("/tools") {
             base_url = base_url.trim_end_matches("/tools").to_string();
         }
-        let url = format!("{}/{}", base_url, tool_name);
+        let url = format!("{}/{}", base_url, call_name);
 
         let req = self.build_request(ws_prov, &url)?;
         let (mut ws_stream, _) = connect_async(req).await?;
@@ -227,11 +231,15 @@ impl ClientTransport for WebSocketTransport {
             .downcast_ref::<WebSocketProvider>()
             .ok_or_else(|| anyhow!("Provider is not a WebSocketProvider"))?;
 
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", ws_prov.base.name))
+            .unwrap_or(tool_name);
+
         let mut base_url = ws_prov.url.trim_end_matches('/').to_string();
         if base_url.ends_with("/tools") {
             base_url = base_url.trim_end_matches("/tools").to_string();
         }
-        let url = format!("{}/{}", base_url, tool_name);
+        let url = format!("{}/{}", base_url, call_name);
 
         let req = self.build_request(ws_prov, &url)?;
         let (mut ws_stream, _) = connect_async(req).await?;

@@ -233,11 +233,15 @@ impl ClientTransport for GraphQLTransport {
             .downcast_ref::<GraphqlProvider>()
             .ok_or_else(|| anyhow!("Provider is not a GraphqlProvider"))?;
 
-        let operation_type = Self::infer_operation(&gql_prov.operation_type, tool_name);
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", gql_prov.base.name))
+            .unwrap_or(tool_name);
+
+        let operation_type = Self::infer_operation(&gql_prov.operation_type, call_name);
         let operation_name = gql_prov
             .operation_name
             .clone()
-            .unwrap_or_else(|| tool_name.to_string());
+            .unwrap_or_else(|| call_name.to_string());
 
         // Use simple variable typing (String) for portability.
         let mut arg_defs = Vec::new();
@@ -257,11 +261,11 @@ impl ClientTransport for GraphQLTransport {
                 operation_type,
                 operation_name,
                 arg_defs.join(", "),
-                tool_name,
+                call_name,
                 arg_uses.join(", ")
             )
         } else {
-            format!("{} {{ {} }}", operation_type, tool_name)
+            format!("{} {{ {} }}", operation_type, call_name)
         };
 
         self.execute_query(gql_prov, &query, variables).await
