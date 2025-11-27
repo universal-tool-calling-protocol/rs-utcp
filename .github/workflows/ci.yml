@@ -34,7 +34,12 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      # 👇 Cache only cargo registry and git index (NOT target)
+      # 👇 Install cargo-llvm-cov for test coverage
+      - name: Install cargo-llvm-cov
+        run: |
+          cargo install cargo-llvm-cov
+
+      # 👇 Cache Cargo dependencies (registry + git index)
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
@@ -45,14 +50,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # 👇 Build & test
-      - name: Run all tests
+      # 👇 Run tests with coverage instrumentation
+      - name: Run tests with coverage
         run: |
           set -euxo pipefail
-          cargo clean
-          cargo test --workspace --all-targets --verbose -- --nocapture
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+          cargo llvm-cov report --summary-only
 
-      # 👇 Clean after tests to avoid filling disk
+      # 👇 Upload HTML coverage report as artifact
+      - name: Upload HTML coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: target/llvm-cov/html
+
+      # 👇 Clean up disk after tests
       - name: Cleanup
         if: always()
         run: |
