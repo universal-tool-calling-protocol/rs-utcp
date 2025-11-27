@@ -38,3 +38,11 @@ pub trait ClientTransport: Send + Sync {
         prov: &dyn Provider,
     ) -> Result<Box<dyn StreamResult>>;
 }
+
+// CommunicationProtocol is the new name for transports; kept as a re-export for backwards
+// compatibility so plugins can implement the updated terminology without breaking old code.
+pub use ClientTransport as CommunicationProtocol;
+
+pub use registry::{
+    communication_protocols_snapshot, register_communication_protocol, CommunicationProtocolRegistry,
+};

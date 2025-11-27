@@ -23,7 +23,7 @@
 
 ## 🌟 Features
 
-- **🔌 12 Transport Protocols** - HTTP, MCP, WebSocket, gRPC, CLI, GraphQL, TCP, UDP, SSE, WebRTC, HTTP Streams, and Text-based
+- **🔌 12 Communication Protocols (formerly transports)** - HTTP, MCP, WebSocket, gRPC, CLI, GraphQL, TCP, UDP, SSE, WebRTC, HTTP Streams, and Text-based
 - **🚀 Async/Await Native** - Built with Tokio for high-performance concurrent operations
 - **📦 Config-Driven** - Load tool providers from JSON with automatic discovery and registration
 - **🔍 Smart Tool Discovery** - Tag-based semantic search across all registered tools
@@ -31,7 +31,7 @@
 - **🔄 Auto-Migration** - Seamless compatibility with UTCP v0.1 and v1.0 formats
 - **📝 OpenAPI Support** - Automatic tool generation from OpenAPI 3.0 specifications
 - **🔐 Multi-Auth** - Support for API keys, Basic Auth, OAuth2, and custom authentication
-- **💾 Streaming** - First-class support for streaming responses across compatible transports
+- **💾 Streaming** - First-class support for streaming responses across compatible communication protocols
 - **🧪 Well-Tested** - 90+ tests ensuring reliability and correctness
 
 ## 📦 Installation
@@ -119,13 +119,13 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## 🔌 Supported Transports
+## 🔌 Supported Communication Protocols
 
-rs-utcp supports a comprehensive range of transport protocols, each with full async support:
+rs-utcp supports a comprehensive range of communication protocols, each with full async support:
 
-### Production-Ready Transports
+### Production-Ready Protocols
 
-| Transport | Description | Status | Streaming |
+| Protocol | Description | Status | Streaming |
 |-----------|-------------|--------|-----------|
 | **HTTP** | REST APIs with UTCP manifest or OpenAPI | ✅ Stable | ❌ |
 | **MCP** | Model Context Protocol (stdio & SSE) | ✅ Stable | ✅ |
@@ -327,27 +327,47 @@ cargo run --example all_providers
 │  (Unified interface for all tool operations)       │
 └─────────────────┬───────────────────────────────────┘
                   │
-         ┌────────┴────────┐
-         │                 │
-  ┌──────▼──────┐   ┌─────▼──────┐
-  │  Repository │   │  Transports │
-  │  - Tools    │   │  - HTTP     │
-  │  - Search   │   │  - MCP      │
-  └─────────────┘   │  - gRPC     │
-                    │  - WebSocket│
-                    │  - CLI      │
-                    │  - etc.     │
-                    └─────────────┘
+         ┌────────┴──────────┐
+         │                   │
+  ┌──────▼──────┐   ┌────────▼────────┐
+  │  Repository │   │ Communication   │
+  │             │   │ Protocols       │
+  │  - Tools    │   │  - HTTP         │
+  │  - Search   │   │  - MCP          │
+  └─────────────┘   │  - gRPC         │
+                    │  - WebSocket    │
+                    │  - CLI          │
+                    │  - etc.         │
+                    └─────────────────┘
 ```
 
 ### Key Components
 
 - **UtcpClient** - Main entry point for all operations
-- **TransportRegistry** - Manages all transport implementations
+- **CommunicationProtocolRegistry** (was TransportRegistry) - Manages all communication protocol implementations
+- **Call template handlers** - Registry that maps `call_template_type` to provider builders
 - **ToolRepository** - Stores and indexes discovered tools
 - **SearchStrategy** - Semantic search across tools
 - **Codemode** - Script execution environment
 - **Loader** - Configuration and provider loading
+
+### Plugin registration (custom protocols)
+
+Register new communication protocols and call template handlers before constructing your client:
+
+```rust
+use std::sync::Arc;
+use rs_utcp::call_templates::register_call_template_handler;
+use rs_utcp::transports::register_communication_protocol;
+
+fn myproto_template_handler(template: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+    // normalize/augment the template into a provider config
+    Ok(template)
+}
+
+register_call_template_handler("myproto", myproto_template_handler);
+register_communication_protocol("myproto", Arc::new(MyProtocol::new())); // implements CommunicationProtocol
+```
 
 ## 🔧 Advanced Configuration
 

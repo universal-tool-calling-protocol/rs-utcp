@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod call_templates;
 pub mod config;
 pub mod errors;
 pub mod grpcpb;
@@ -26,9 +27,11 @@ use crate::providers::base::{Provider, ProviderType};
 use crate::providers::http::HttpProvider;
 use crate::repository::ToolRepository;
 use crate::tools::{Tool, ToolSearchStrategy};
-use crate::transports::registry::TransportRegistry;
+use crate::transports::registry::{
+    communication_protocols_snapshot, CommunicationProtocolRegistry,
+};
 use crate::transports::stream::StreamResult;
-use crate::transports::ClientTransport;
+use crate::transports::CommunicationProtocol;
 
 #[async_trait]
 pub trait UtcpClientInterface: Send + Sync {
@@ -45,7 +48,12 @@ pub trait UtcpClientInterface: Send + Sync {
         args: HashMap<String, serde_json::Value>,
     ) -> Result<serde_json::Value>;
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>>;
-    fn get_transports(&self) -> HashMap<String, Arc<dyn ClientTransport>>;
+    fn get_transports(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>>;
+    fn get_communication_protocols(
+        &self,
+    ) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
+        self.get_transports()
+    }
     async fn call_tool_stream(
         &self,
         tool_name: &str,
@@ -55,7 +63,7 @@ pub trait UtcpClientInterface: Send + Sync {
 
 pub struct UtcpClient {
     config: UtcpClientConfig,
-    transports: TransportRegistry,
+    communication_protocols: CommunicationProtocolRegistry,
     tool_repository: Arc<dyn ToolRepository>,
     search_strategy: Arc<dyn ToolSearchStrategy>,
 
@@ -66,7 +74,7 @@ pub struct UtcpClient {
 #[derive(Clone)]
 struct ResolvedTool {
     provider: Arc<dyn Provider>,
-    transport: Arc<dyn ClientTransport>,
+    protocol: Arc<dyn CommunicationProtocol>,
     call_name: String,
 }
 
@@ -86,11 +94,11 @@ impl UtcpClient {
         repo: Arc<dyn ToolRepository>,
         strat: Arc<dyn ToolSearchStrategy>,
     ) -> Result<Self> {
-        let transports = TransportRegistry::with_default_transports();
+        let communication_protocols = communication_protocols_snapshot();
 
         let client = Self {
             config,
-            transports,
+            communication_protocols,
             tool_repository: repo,
             search_strategy: strat,
             provider_tools_cache: RwLock::new(HashMap::new()),
@@ -158,13 +166,13 @@ impl UtcpClient {
                 .ok_or_else(|| UtcpError::ToolNotFound(provider_name.to_string()))?;
             let provider_type = prov.type_();
 
-            let transport_key = provider_type.as_key().to_string();
-            let transport = self
-                .transports
-                .get(&transport_key)
+            let protocol_key = provider_type.as_key().to_string();
+            let protocol = self
+                .communication_protocols
+                .get(&protocol_key)
                 .ok_or_else(|| {
                     UtcpError::Config(format!(
-                        "No transport found for provider type: {:?}",
+                        "No communication protocol found for provider type: {:?}",
                         provider_type
                     ))
                 })?
@@ -173,7 +181,7 @@ impl UtcpClient {
             let call_name = Self::call_name_for_provider(tool_name, &provider_type);
             let resolved = ResolvedTool {
                 provider: prov.clone(),
-                transport: transport.clone(),
+                protocol: protocol.clone(),
                 call_name,
             };
 
@@ -199,13 +207,13 @@ impl UtcpClient {
                         .await?
                         .ok_or_else(|| UtcpError::ToolNotFound(prov_name.clone()))?;
                     let provider_type = prov.type_();
-                    let transport_key = provider_type.as_key().to_string();
-                    let transport = self
-                        .transports
-                        .get(&transport_key)
+                    let protocol_key = provider_type.as_key().to_string();
+                    let protocol = self
+                        .communication_protocols
+                        .get(&protocol_key)
                         .ok_or_else(|| {
                             UtcpError::Config(format!(
-                                "No transport found for provider type: {:?}",
+                                "No communication protocol found for provider type: {:?}",
                                 provider_type
                             ))
                         })?
@@ -215,7 +223,7 @@ impl UtcpClient {
                     let call_name = Self::call_name_for_provider(&full_name, &provider_type);
                     let resolved = ResolvedTool {
                         provider: prov.clone(),
-                        transport: transport.clone(),
+                        protocol: protocol.clone(),
                         call_name,
                     };
 
@@ -254,15 +262,20 @@ impl UtcpClientInterface for UtcpClient {
             }
         }
 
-        // Get transport for this provider type
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?
+        // Get communication protocol for this provider type
+        let protocol_key = provider_type.as_key().to_string();
+        let protocol = self
+            .communication_protocols
+            .get(&protocol_key)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No communication protocol found for provider type: {:?}",
+                    provider_type
+                )
+            })?
             .clone();
 
-        // Register with transport
+        // Register with protocol
         let tools = if !tools_override.is_empty() {
             tools_override
         } else if provider_type == ProviderType::Http {
@@ -273,18 +286,18 @@ impl UtcpClientInterface for UtcpClient {
                     Ok(converter) => {
                         let manual = converter.convert();
                         if manual.tools.is_empty() {
-                            transport.register_tool_provider(prov.as_ref()).await?
+                            protocol.register_tool_provider(prov.as_ref()).await?
                         } else {
                             manual.tools
                         }
                     }
-                    Err(_) => transport.register_tool_provider(prov.as_ref()).await?,
+                    Err(_) => protocol.register_tool_provider(prov.as_ref()).await?,
                 }
             } else {
-                transport.register_tool_provider(prov.as_ref()).await?
+                protocol.register_tool_provider(prov.as_ref()).await?
             }
         } else {
-            transport.register_tool_provider(prov.as_ref()).await?
+            protocol.register_tool_provider(prov.as_ref()).await?
         };
 
         // Normalize tool names (prefix with provider name)
@@ -313,7 +326,7 @@ impl UtcpClientInterface for UtcpClient {
                 let call_name = Self::call_name_for_provider(&tool.name, &provider_type);
                 let resolved_entry = ResolvedTool {
                     provider: prov.clone(),
-                    transport: transport.clone(),
+                    protocol: protocol.clone(),
                     call_name,
                 };
 
@@ -338,16 +351,18 @@ impl UtcpClientInterface for UtcpClient {
             .await?
             .ok_or_else(|| anyhow!("Provider not found: {}", provider_name))?;
 
-        // Get transport
+        // Get communication protocol
         let provider_type = prov.type_();
-        let transport_key = provider_type.as_key().to_string();
-        let transport = self
-            .transports
-            .get(&transport_key)
-            .ok_or_else(|| anyhow!("No transport found for provider type: {:?}", provider_type))?;
+        let protocol_key = provider_type.as_key().to_string();
+        let protocol = self.communication_protocols.get(&protocol_key).ok_or_else(|| {
+            anyhow!(
+                "No communication protocol found for provider type: {:?}",
+                provider_type
+            )
+        })?;
 
-        // Deregister from transport
-        transport.deregister_tool_provider(prov.as_ref()).await?;
+        // Deregister from protocol
+        protocol.deregister_tool_provider(prov.as_ref()).await?;
 
         // Remove from repository
         self.tool_repository.remove_provider(provider_name).await?;
@@ -372,7 +387,7 @@ impl UtcpClientInterface for UtcpClient {
     ) -> Result<serde_json::Value> {
         let resolved = self.resolve_tool(tool_name).await?;
         resolved
-            .transport
+            .protocol
             .call_tool(&resolved.call_name, args, resolved.provider.as_ref())
             .await
     }
@@ -381,8 +396,8 @@ impl UtcpClientInterface for UtcpClient {
         self.search_strategy.search_tools(query, limit).await
     }
 
-    fn get_transports(&self) -> HashMap<String, Arc<dyn ClientTransport>> {
-        self.transports.as_map()
+    fn get_transports(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
+        self.communication_protocols.as_map()
     }
 
     async fn call_tool_stream(
@@ -392,7 +407,7 @@ impl UtcpClientInterface for UtcpClient {
     ) -> Result<Box<dyn StreamResult>> {
         let resolved = self.resolve_tool(tool_name).await?;
         resolved
-            .transport
+            .protocol
             .call_tool_stream(&resolved.call_name, args, resolved.provider.as_ref())
             .await
     }

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1]
+
+### Added
+- Call template handler registry so plugins can register new `call_template_type` converters
+- Global communication protocol registry (`register_communication_protocol`) for pluggable protocols
+
+### Changed
+- Transports renamed to communication protocols throughout the client API while keeping backward compatibility
+- Documentation refreshed to describe the new registries and plugin extension points
+- Dependency update: added `once_cell` for global registry initialization
+
 ## [0.1.8] - 2025-11-26
 
 ### Changed

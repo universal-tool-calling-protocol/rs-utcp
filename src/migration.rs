@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use serde_json::{json, Map, Value};
 
+use crate::call_templates;
+
 /// Best-effort migration of a v0.1 configuration object to the v1.0 shape.
 /// - providers -> manual_call_templates
 /// - provider_type -> call_template_type
@@ -140,7 +142,7 @@ pub fn provider_to_call_template(provider: &Value) -> Option<Value> {
 
 /// Convert a call template into a provider representation for backward compatibility.
 pub fn call_template_to_provider(template: &Value) -> Option<Value> {
-    provider_to_call_template(template)
+    call_templates::call_template_to_provider(template.clone()).ok()
 }
 
 /// Basic validation for a v1.0 config. Ensures manual_call_templates exist when no providers.
