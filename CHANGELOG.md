@@ -230,15 +230,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive test coverage
   - Migration to v1.0.0 specification
 
+- **2025-11-27**: Stabilization and Refactoring
+  - Transports refactored to "Communication Protocols"
+  - Global registry implementation
+  - Plugin system enhancements
+  - Comprehensive unit testing
+
+- **2025-11-28**: Performance and Documentation
+  - Comprehensive benchmarking suite added
+  - Search algorithm optimizations
+  - Documentation improvements
+  - CI/CD pipeline enhancements
+
 ### Key Milestones
 - **v0.1.0** (2025-11-25): Initial release with 12 transport types and codemode support
 - **v0.1.1** (2025-11-26): Unified async constructor API
 - **v0.1.2** (2025-11-26): MCP SSE transport support
-- **v0.1.4** (2025-11-26): Orchestrator bug fixes
 - **v0.1.5** (2025-11-26): OpenAPI converter integration
-- **v0.1.6** (2025-11-26): Orchestrator examples
 - **v0.1.7** (2025-11-26): Comprehensive testing and documentation
-- **v1.0.0** (In Progress): UTCP v1.0.0 specification alignment
+- **v0.2.0** (2025-11-26): Performance optimizations and architecture improvements
+- **v0.2.1** (2025-11-27): Protocol registry and plugin system
+- **v0.2.4** (2025-11-28): Comprehensive performance benchmarks suite
 
 ## Migration Guide
 
