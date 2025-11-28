@@ -58,7 +58,8 @@ impl ToolRepository for InMemoryToolRepository {
 
     async fn get_tools(&self) -> Result<Vec<Tool>> {
         let tools_map = self.tools.read().await;
-        let mut all_tools = Vec::new();
+        let total_len: usize = tools_map.values().map(|tools| tools.len()).sum();
+        let mut all_tools = Vec::with_capacity(total_len);
         for tools in tools_map.values() {
             all_tools.extend(tools.clone());
         }
