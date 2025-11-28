@@ -5,7 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2]
+## [0.2.4] - 2025-11-28
+
+### Added
+- **Performance Benchmarks** - Comprehensive Criterion.rs benchmark suite covering:
+  - Tool operations (registration, search, client initialization, tag matching)
+  - Protocol comparison (HTTP, CLI, WebSocket, MCP, gRPC, SSE)
+  - Codemode execution (script complexity, `call_tool` overhead, multiple calls)
+  - Detailed README in `benches/` with usage instructions and performance baselines
+- Criterion as a dev-dependency with async_tokio and html_reports features
+
+## [0.2.3] - 2025-11-28
+
+### Added
+- Documentation updates (#14)
+- Search tool optimizations (#15)
+
+### Changed
+- Refactoring session for codebase improvements
+- Updated dependencies (Cargo.lock)
+
+## [0.2.2] - 2025-11-27
 
 ### Added
 - Apache 2.0 `LICENSE` file to make the MIT/Apache-2.0 licensing explicit
@@ -18,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Strip provider prefixes before invoking GraphQL, HTTP stream, WebSocket, and SSE tools so prefixed tool names hit the correct endpoints
 
-## [0.2.1]
+## [0.2.1] - 2025-11-27
 
 ### Added
 - Call template handler registry so plugins can register new `call_template_type` converters
@@ -32,6 +52,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Strip provider prefixes when calling HTTP stream, SSE, WebSocket, and GraphQL protocols to avoid 404s (e.g., `http_stream_server` example)
+
+## [0.2.0] - 2025-11-26
+
+### Added
+- Performance optimizations (#11)
+- Enhanced internal architecture for better scalability
+
+## [0.1.9] - 2025-11-26
+
+### Added
+- WebRTC transport updates and improvements (#8)
+- Comprehensive unit tests for all providers (#9)
+- GitHub Actions workflow updates
+
+### Changed
+- Updated README with latest examples
+- Improved test coverage
 
 ## [0.1.8] - 2025-11-26
 
