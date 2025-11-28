@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider configuration for GraphQL endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphqlProvider {
     #[serde(flatten)]
@@ -32,6 +33,7 @@ impl Provider for GraphqlProvider {
 }
 
 impl GraphqlProvider {
+    /// Create a GraphQL provider with sensible defaults.
     pub fn new(name: String, url: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

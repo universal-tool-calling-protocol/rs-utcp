@@ -39,9 +39,12 @@ pub async fn load_providers_from_file(
         .collect())
 }
 
-/// Loaded provider plus optional tools (when the input file is a manual).
+/// LoadedProvider represents a provider that has been loaded from a configuration file,
+/// optionally including a list of tools if they were defined in the file (e.g. in a manual).
 pub struct LoadedProvider {
+    /// The loaded provider instance.
     pub provider: Arc<dyn Provider>,
+    /// Optional list of tools associated with this provider.
     pub tools: Option<Vec<crate::tools::Tool>>,
 }
 
@@ -101,6 +104,8 @@ pub async fn load_providers_with_tools_from_file(
     Ok(providers)
 }
 
+/// Parses the raw JSON value into a list of provider JSON objects.
+/// Handles various formats: array, object with "providers", object with "manual_call_templates", or single provider object.
 fn parse_providers_json(json: Value) -> Result<Vec<Value>> {
     match json {
         // Direct array of providers
@@ -161,6 +166,8 @@ fn parse_manual_tools(json: Value) -> Result<Vec<Value>> {
     Ok(providers)
 }
 
+/// Parses a manual JSON object to extract both providers and their associated tools.
+/// Returns a tuple of (providers, tools_per_provider).
 fn parse_manual_tools_with_providers(
     json: Value,
     config: &UtcpClientConfig,
@@ -221,6 +228,8 @@ fn parse_manual_tools_with_providers(
     Ok((providers, tools_per_provider))
 }
 
+/// Extracts a provider definition from a tool JSON object.
+/// Checks for "tool_call_template" or "provider" fields.
 fn tool_to_provider(tool: &Value) -> Result<Option<Value>> {
     let tool_obj = tool
         .as_object()
@@ -239,6 +248,8 @@ fn tool_to_provider(tool: &Value) -> Result<Option<Value>> {
     }
 }
 
+/// Creates a Provider instance from a JSON value.
+/// Handles type normalization and defaults.
 fn create_provider_from_value(mut value: Value, index: usize) -> Result<Arc<dyn Provider>> {
     // Normalize type field: accept both "type" and "provider_type"
     let provider_type = {
@@ -348,6 +359,8 @@ fn create_provider_from_value(mut value: Value, index: usize) -> Result<Arc<dyn 
     }
 }
 
+/// Substitutes variables in the JSON value using the provided configuration.
+/// Replaces ${VAR} and $VAR with values from config or environment.
 fn substitute_variables(value: &mut Value, config: &UtcpClientConfig) {
     match value {
         Value::String(s) => {

@@ -11,15 +11,18 @@ use tokio::runtime::{Builder, RuntimeFlavor};
 use crate::tools::{Tool, ToolInputOutputSchema};
 use crate::UtcpClientInterface;
 
+/// Minimal facade exposing UTCP calls to Rhai scripts executed by CodeMode.
 pub struct CodeModeUtcp {
     client: Arc<dyn UtcpClientInterface>,
 }
 
 impl CodeModeUtcp {
+    /// Wrap an `UtcpClientInterface` so codemode scripts can invoke tools.
     pub fn new(client: Arc<dyn UtcpClientInterface>) -> Self {
         Self { client }
     }
 
+    /// Execute a snippet or JSON payload, returning the resulting value and captured output.
     pub async fn execute(&self, args: CodeModeArgs) -> Result<CodeModeResult> {
         // If it's JSON already, return it directly.
         if let Ok(json) = serde_json::from_str::<Value>(&args.code) {
@@ -181,6 +184,7 @@ impl CodeModeUtcp {
         Ok(value)
     }
 
+    /// Expose the codemode tool definition for registration.
     pub fn tool(&self) -> Tool {
         self.tool_schema()
     }
@@ -205,6 +209,7 @@ impl CodeModeUtcp {
 
 #[async_trait::async_trait]
 pub trait LlmModel: Send + Sync {
+    /// Produce a completion for the provided prompt.
     async fn complete(&self, prompt: &str) -> Result<Value>;
 }
 
@@ -220,6 +225,7 @@ pub struct CodemodeOrchestrator {
 }
 
 impl CodemodeOrchestrator {
+    /// Create a new orchestrator backed by a CodeMode UTCP shim and an LLM model.
     pub fn new(codemode: Arc<CodeModeUtcp>, model: Arc<dyn LlmModel>) -> Self {
         Self {
             codemode,
@@ -369,6 +375,7 @@ Return the final value as the last expression (map/list/scalar). No markdown or 
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Arguments accepted by the codemode tool.
 pub struct CodeModeArgs {
     pub code: String,
     #[serde(default)]
@@ -376,6 +383,7 @@ pub struct CodeModeArgs {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Result payload returned from codemode execution.
 pub struct CodeModeResult {
     pub value: Value,
     #[serde(default)]
@@ -409,6 +417,7 @@ fn value_to_map(value: Value) -> Result<HashMap<String, Value>, Box<EvalAltResul
     }
 }
 
+/// Minimal string formatter exposed to Rhai snippets.
 pub fn sprintf(fmt: &str, args: &[Dynamic]) -> String {
     let mut out = fmt.to_string();
     for rendered in args.iter().map(|v| v.to_string()) {

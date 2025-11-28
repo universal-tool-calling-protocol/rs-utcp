@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::process::Command;
 
+/// Transport that loads tools from a directory and executes scripts locally.
 pub struct TextTransport {
     base_path: Option<PathBuf>,
 }
@@ -23,10 +24,12 @@ enum ScriptKind {
 }
 
 impl TextTransport {
+    /// Create a text transport without a default base path.
     pub fn new() -> Self {
         Self { base_path: None }
     }
 
+    /// Configure a base directory that holds tool scripts and manifests.
     pub fn with_base_path(mut self, path: PathBuf) -> Self {
         self.base_path = Some(path);
         self

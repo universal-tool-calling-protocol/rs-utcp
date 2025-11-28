@@ -16,9 +16,11 @@ use crate::transports::{
     ClientTransport,
 };
 
+/// TCP transport used for simple length-delimited or line-delimited JSON exchanges.
 pub struct TcpTransport;
 
 impl TcpTransport {
+    /// Create a TCP transport instance.
     pub fn new() -> Self {
         Self
     }

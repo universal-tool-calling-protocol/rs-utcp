@@ -12,6 +12,7 @@ pub struct CommunicationProtocolRegistry {
 }
 
 impl CommunicationProtocolRegistry {
+    /// Create an empty registry without any transports.
     pub fn new() -> Self {
         Self {
             map: Arc::new(RwLock::new(HashMap::new())),
@@ -30,6 +31,7 @@ impl CommunicationProtocolRegistry {
         Self::with_default_protocols()
     }
 
+    /// Register all built-in transports into this registry instance.
     pub fn register_default_protocols(&self) {
         self.register(
             "http",
@@ -66,6 +68,7 @@ impl CommunicationProtocolRegistry {
         );
     }
 
+    /// Add a protocol implementation under the provided key.
     pub fn register(&self, key: &str, protocol: Arc<dyn CommunicationProtocol>) {
         let mut guard = self
             .map
@@ -74,6 +77,7 @@ impl CommunicationProtocolRegistry {
         guard.insert(key.to_string(), protocol);
     }
 
+    /// Look up a protocol by key.
     pub fn get(&self, key: &str) -> Option<Arc<dyn CommunicationProtocol>> {
         let guard = self
             .map
@@ -82,6 +86,7 @@ impl CommunicationProtocolRegistry {
         guard.get(key).cloned()
     }
 
+    /// Return a copy of the current map for inspection or iteration.
     pub fn as_map(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
         let guard = self
             .map

@@ -21,16 +21,21 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// Core transport abstraction all communication protocols implement.
 #[async_trait]
 pub trait ClientTransport: Send + Sync {
+    /// Register a tool provider with the underlying transport, returning discovered tools.
     async fn register_tool_provider(&self, prov: &dyn Provider) -> Result<Vec<Tool>>;
+    /// Deregister a tool provider and release any associated resources.
     async fn deregister_tool_provider(&self, prov: &dyn Provider) -> Result<()>;
+    /// Invoke a tool over the transport and return the result payload.
     async fn call_tool(
         &self,
         tool_name: &str,
         args: HashMap<String, Value>,
         prov: &dyn Provider,
     ) -> Result<Value>;
+    /// Invoke a tool and stream incremental responses back to the caller.
     async fn call_tool_stream(
         &self,
         tool_name: &str,

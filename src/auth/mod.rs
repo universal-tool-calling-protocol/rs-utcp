@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Supported authentication mechanisms across transports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthType {
@@ -9,11 +10,13 @@ pub enum AuthType {
     OAuth2,
 }
 
+/// Contract implemented by auth configs to validate their state and report their type.
 pub trait Auth: Send + Sync + std::fmt::Debug {
     fn auth_type(&self) -> AuthType;
     fn validate(&self) -> Result<(), AuthError>;
 }
 
+/// Validation errors emitted by auth implementations.
 #[derive(Error, Debug)]
 pub enum AuthError {
     #[error("API key must be provided")]
@@ -32,6 +35,7 @@ pub enum AuthError {
     MissingClientSecret,
 }
 
+/// API key authentication descriptor used by HTTP-like transports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyAuth {
     pub auth_type: AuthType,
@@ -41,6 +45,7 @@ pub struct ApiKeyAuth {
 }
 
 impl ApiKeyAuth {
+    /// Build an API key auth config with common defaults.
     pub fn new(api_key: String) -> Self {
         Self {
             auth_type: AuthType::ApiKey,
@@ -67,6 +72,7 @@ impl Auth for ApiKeyAuth {
     }
 }
 
+/// Basic authentication descriptor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicAuth {
     pub auth_type: AuthType,
@@ -75,6 +81,7 @@ pub struct BasicAuth {
 }
 
 impl BasicAuth {
+    /// Build a basic auth config from username/password.
     pub fn new(username: String, password: String) -> Self {
         Self {
             auth_type: AuthType::Basic,
@@ -100,6 +107,7 @@ impl Auth for BasicAuth {
     }
 }
 
+/// OAuth2 client credentials descriptor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuth2Auth {
     pub auth_type: AuthType,
@@ -146,6 +154,7 @@ impl Auth for OAuth2Auth {
     }
 }
 
+/// Untagged wrapper that allows serde to deserialize any auth config and still expose the `Auth` trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AuthConfig {

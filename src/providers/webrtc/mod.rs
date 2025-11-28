@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// STUN/TURN server configuration passed to the WebRTC stack.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IceServer {
     pub urls: Vec<String>,
@@ -12,6 +13,7 @@ pub struct IceServer {
     pub credential: Option<String>,
 }
 
+/// Provider definition for peer-to-peer WebRTC transports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebRtcProvider {
     #[serde(flatten)]
@@ -72,6 +74,7 @@ impl Provider for WebRtcProvider {
 }
 
 impl WebRtcProvider {
+    /// Construct a WebRTC provider backed by a signaling server URL.
     pub fn new(name: String, signaling_server: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

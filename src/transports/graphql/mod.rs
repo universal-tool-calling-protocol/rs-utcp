@@ -11,11 +11,13 @@ use crate::providers::graphql::GraphqlProvider;
 use crate::tools::{Tool, ToolInputOutputSchema};
 use crate::transports::{stream::StreamResult, ClientTransport};
 
+/// Transport that maps GraphQL operations to UTCP tools.
 pub struct GraphQLTransport {
     client: Client,
 }
 
 impl GraphQLTransport {
+    /// Create a GraphQL transport using a default reqwest client.
     pub fn new() -> Self {
         Self {
             client: Client::new(),

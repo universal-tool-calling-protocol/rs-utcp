@@ -119,6 +119,8 @@ pub fn migrate_v01_manual(manual: &Value) -> Value {
     Value::Object(out)
 }
 
+/// Converts a provider configuration object into a call template object.
+/// Normalizes fields like `provider_type` to `call_template_type` and ensures HTTP method presence.
 pub fn provider_to_call_template(provider: &Value) -> Option<Value> {
     let mut obj = provider.as_object()?.clone();
     let ptype = obj

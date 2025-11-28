@@ -22,9 +22,11 @@ use crate::transports::{
 use crate::grpcpb::generated::utcp_service_client::UtcpServiceClient;
 use crate::grpcpb::generated::{Empty, ToolCallRequest};
 
+/// Transport implementation that communicates with UTCP servers over gRPC.
 pub struct GrpcTransport;
 
 impl GrpcTransport {
+    /// Create a gRPC transport instance.
     pub fn new() -> Self {
         Self
     }

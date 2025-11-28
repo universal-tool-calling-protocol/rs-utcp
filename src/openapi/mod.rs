@@ -10,12 +10,14 @@ use crate::tools::{Tool, ToolInputOutputSchema};
 
 pub const VERSION: &str = "1.0";
 
+/// Representation of a generated UTCP manual derived from an OpenAPI spec.
 #[derive(Debug, Clone)]
 pub struct UtcpManual {
     pub version: String,
     pub tools: Vec<Tool>,
 }
 
+/// Converts OpenAPI v2/v3 documents into UTCP tool definitions.
 pub struct OpenApiConverter {
     spec: Value,
     spec_url: Option<String>,
@@ -23,6 +25,7 @@ pub struct OpenApiConverter {
 }
 
 impl OpenApiConverter {
+    /// Build a converter from an already loaded spec value.
     pub fn new(
         openapi_spec: Value,
         spec_url: Option<String>,
@@ -39,11 +42,13 @@ impl OpenApiConverter {
         }
     }
 
+    /// Fetch and parse a remote OpenAPI document, inferring a provider name when missing.
     pub async fn new_from_url(spec_url: &str, provider_name: Option<String>) -> Result<Self> {
         let (spec, final_url) = load_spec_from_url(spec_url).await?;
         Ok(Self::new(spec, Some(final_url), provider_name))
     }
 
+    /// Convert the OpenAPI document into a UTCP manual containing tools and metadata.
     pub fn convert(&self) -> UtcpManual {
         let mut tools = Vec::new();
         let base_url = self.base_url();
@@ -621,6 +626,7 @@ impl OpenApiConverter {
     }
 }
 
+/// Load an OpenAPI/Swagger document from a URL, handling JSON or YAML.
 pub async fn load_spec_from_url(raw_url: &str) -> Result<(Value, String)> {
     let resp = reqwest::get(raw_url).await?;
     let status = resp.status();

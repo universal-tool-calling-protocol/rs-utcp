@@ -16,17 +16,20 @@ use crate::transports::{
     ClientTransport,
 };
 
+/// Transport for HTTP endpoints that stream newline-delimited JSON or chunked bodies.
 pub struct StreamableHttpTransport {
     client: Client,
 }
 
 impl StreamableHttpTransport {
+    /// Create a streaming HTTP transport with a default client.
     pub fn new() -> Self {
         Self {
             client: Client::new(),
         }
     }
 
+    /// Attach authentication headers or query params to the request builder.
     fn apply_auth(
         &self,
         builder: reqwest::RequestBuilder,

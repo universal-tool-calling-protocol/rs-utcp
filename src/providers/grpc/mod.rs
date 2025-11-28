@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for gRPC services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcProvider {
     #[serde(flatten)]
@@ -28,6 +29,7 @@ impl Provider for GrpcProvider {
 }
 
 impl GrpcProvider {
+    /// Construct a gRPC provider with host/port and optional auth.
     pub fn new(name: String, host: String, port: u16, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

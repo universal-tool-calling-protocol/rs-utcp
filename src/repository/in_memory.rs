@@ -7,12 +7,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Simple in-memory repository for tests and local usage.
 pub struct InMemoryToolRepository {
     tools: RwLock<HashMap<String, Vec<Tool>>>, // provider_name -> tools
     providers: RwLock<HashMap<String, Arc<dyn Provider>>>, // provider_name -> Provider
 }
 
 impl InMemoryToolRepository {
+    /// Create an empty repository instance.
     pub fn new() -> Self {
         Self {
             tools: RwLock::new(HashMap::new()),

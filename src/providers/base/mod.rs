@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthConfig;
 
+/// Provider categories supported by UTCP transports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderType {
@@ -22,6 +23,7 @@ pub enum ProviderType {
 }
 
 impl ProviderType {
+    /// Transport registry key used to look up the matching communication protocol.
     pub fn as_key(&self) -> &'static str {
         match self {
             ProviderType::Http => "http",
@@ -63,13 +65,18 @@ mod tests {
     }
 }
 
+/// Common interface each provider implementation must expose.
 pub trait Provider: Send + Sync + std::fmt::Debug + std::any::Any {
+    /// Return the provider type used to pick the right transport.
     fn type_(&self) -> ProviderType;
+    /// Human readable provider name used for discovery and namespacing tools.
     fn name(&self) -> String;
 
+    /// Downcast helper for transports that need the concrete provider type.
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
+/// Minimal provider shape shared by most transport-specific provider structs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaseProvider {
     pub name: String,

@@ -11,11 +11,13 @@ use crate::providers::http::HttpProvider;
 use crate::tools::Tool;
 use crate::transports::{stream::StreamResult, ClientTransport};
 
+/// Transport for synchronous HTTP providers that expose JSON APIs.
 pub struct HttpClientTransport {
     pub client: Client,
 }
 
 impl HttpClientTransport {
+    /// Build a new HTTP client transport with tuned defaults.
     pub fn new() -> Self {
         // Optimized HTTP client with connection pooling and compression
         let client = Client::builder()
@@ -34,6 +36,7 @@ impl HttpClientTransport {
         Self { client }
     }
 
+    /// Attach authentication headers or query params to the request builder.
     fn apply_auth(
         &self,
         builder: reqwest::RequestBuilder,
