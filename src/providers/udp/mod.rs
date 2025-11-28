@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for UDP datagram endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UdpProvider {
     #[serde(flatten)]
@@ -28,6 +29,7 @@ impl Provider for UdpProvider {
 }
 
 impl UdpProvider {
+    /// Create a UDP provider with host/port and optional timeout.
     pub fn new(name: String, host: String, port: u16, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

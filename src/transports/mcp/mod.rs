@@ -114,6 +114,7 @@ impl McpStdioProcess {
     }
 }
 
+/// Transport for MCP providers over HTTP or stdio.
 pub struct McpTransport {
     client: Client,
     // Map of provider name to stdio process
@@ -121,6 +122,7 @@ pub struct McpTransport {
 }
 
 impl McpTransport {
+    /// Create an MCP transport with a tuned reqwest client.
     pub fn new() -> Self {
         // Optimized HTTP client for MCP transport
         let client = Client::builder()

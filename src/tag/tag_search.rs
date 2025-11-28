@@ -6,6 +6,7 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+/// Simple tag/description based search that rewards tag matches and keyword overlap.
 pub struct TagSearchStrategy {
     tool_repository: Arc<dyn ToolRepository>,
     description_weight: f64,
@@ -13,6 +14,7 @@ pub struct TagSearchStrategy {
 }
 
 impl TagSearchStrategy {
+    /// Build a new tag search strategy with configurable description weight.
     pub fn new(repo: Arc<dyn ToolRepository>, description_weight: f64) -> Self {
         Self {
             tool_repository: repo,
@@ -29,6 +31,7 @@ struct ScoredTool {
 
 #[async_trait]
 impl ToolSearchStrategy for TagSearchStrategy {
+    /// Score tools by tags and description keywords and return the best matches.
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>> {
         let query_lower = query.trim().to_lowercase();
         let words: Vec<String> = self

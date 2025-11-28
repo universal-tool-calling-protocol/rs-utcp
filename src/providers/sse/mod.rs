@@ -33,6 +33,7 @@ impl Provider for SseProvider {
 }
 
 impl SseProvider {
+    /// Construct an SSE provider pointing at a streaming endpoint.
     pub fn new(name: String, url: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

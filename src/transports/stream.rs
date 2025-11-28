@@ -19,6 +19,7 @@ pub struct ChannelStreamResult {
 }
 
 impl ChannelStreamResult {
+    /// Create a new channel-backed stream with an optional close callback.
     pub fn new(
         rx: mpsc::Receiver<Result<Value>>,
         close_fn: Option<Box<dyn FnOnce() -> Result<()> + Send>>,
@@ -53,6 +54,7 @@ pub struct VecStreamResult {
 }
 
 impl VecStreamResult {
+    /// Wrap an eager collection of values as a stream result.
     pub fn new(
         items: Vec<Value>,
         close_fn: Option<Box<dyn FnOnce() -> Result<()> + Send>>,

@@ -12,9 +12,11 @@ use crate::providers::cli::CliProvider;
 use crate::tools::Tool;
 use crate::transports::{stream::StreamResult, ClientTransport};
 
+/// Transport that shells out to a CLI binary which exposes UTCP-compatible commands.
 pub struct CliTransport;
 
 impl CliTransport {
+    /// Create a CLI transport.
     pub fn new() -> Self {
         Self
     }

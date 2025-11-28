@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider configuration for WebSocket endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketProvider {
     #[serde(flatten)]
@@ -32,6 +33,7 @@ impl Provider for WebSocketProvider {
 }
 
 impl WebSocketProvider {
+    /// Create a WebSocket provider pointing at a URL.
     pub fn new(name: String, url: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

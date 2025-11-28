@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for CLI-based tool execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliProvider {
     #[serde(flatten)]
@@ -30,6 +31,7 @@ impl Provider for CliProvider {
 }
 
 impl CliProvider {
+    /// Construct a CLI provider with a base command and optional authentication metadata.
     pub fn new(name: String, command_name: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

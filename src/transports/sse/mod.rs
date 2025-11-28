@@ -17,11 +17,13 @@ use crate::transports::{
     ClientTransport,
 };
 
+/// Transport for Server-Sent Events endpoints that return event streams per tool call.
 pub struct SseTransport {
     client: Client,
 }
 
 impl SseTransport {
+    /// Create an SSE transport backed by a reqwest client.
     pub fn new() -> Self {
         Self {
             client: Client::new(),

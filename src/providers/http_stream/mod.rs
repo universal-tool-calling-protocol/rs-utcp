@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for streaming HTTP endpoints that emit chunked JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamableHttpProvider {
     #[serde(flatten)]
@@ -30,6 +31,7 @@ impl Provider for StreamableHttpProvider {
 }
 
 impl StreamableHttpProvider {
+    /// Construct a streaming HTTP provider pointing at a base URL.
     pub fn new(name: String, url: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

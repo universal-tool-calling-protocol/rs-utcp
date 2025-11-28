@@ -26,9 +26,11 @@ use crate::transports::{
     ClientTransport,
 };
 
+/// Transport that communicates with tools over WebSocket connections.
 pub struct WebSocketTransport;
 
 impl WebSocketTransport {
+    /// Create a WebSocket transport.
     pub fn new() -> Self {
         Self
     }

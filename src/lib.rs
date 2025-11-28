@@ -33,25 +33,42 @@ use crate::transports::registry::{
 use crate::transports::stream::StreamResult;
 use crate::transports::CommunicationProtocol;
 
+/// UtcpClientInterface defines the core operations for a UTCP client.
+/// It allows registering/deregistering tool providers, calling tools, and searching for tools.
 #[async_trait]
 pub trait UtcpClientInterface: Send + Sync {
+    /// Registers a new tool provider and returns the list of tools it offers.
     async fn register_tool_provider(&self, prov: Arc<dyn Provider>) -> Result<Vec<Tool>>;
+
+    /// Registers a tool provider with a specific set of tools, overriding automatic discovery.
     async fn register_tool_provider_with_tools(
         &self,
         prov: Arc<dyn Provider>,
         tools: Vec<Tool>,
     ) -> Result<Vec<Tool>>;
+
+    /// Deregisters an existing tool provider by its name.
     async fn deregister_tool_provider(&self, provider_name: &str) -> Result<()>;
+
+    /// Calls a specific tool by name with the provided arguments.
     async fn call_tool(
         &self,
         tool_name: &str,
         args: HashMap<String, serde_json::Value>,
     ) -> Result<serde_json::Value>;
+
+    /// Searches for tools matching the query string, limited by the count.
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>>;
+
+    /// Returns a map of available transports (communication protocols).
     fn get_transports(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>>;
+
+    /// Alias for get_transports.
     fn get_communication_protocols(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
         self.get_transports()
     }
+
+    /// Calls a tool and returns a stream of results (e.g., for SSE).
     async fn call_tool_stream(
         &self,
         tool_name: &str,
@@ -59,6 +76,8 @@ pub trait UtcpClientInterface: Send + Sync {
     ) -> Result<Box<dyn StreamResult>>;
 }
 
+/// UtcpClient is the main entry point for the UTCP library.
+/// It manages tool providers, communication protocols, and tool execution.
 pub struct UtcpClient {
     config: UtcpClientConfig,
     communication_protocols: CommunicationProtocolRegistry,
@@ -69,6 +88,7 @@ pub struct UtcpClient {
     resolved_tools_cache: RwLock<HashMap<String, ResolvedTool>>,
 }
 
+/// ResolvedTool represents a tool that has been resolved to a specific provider and protocol.
 #[derive(Clone)]
 struct ResolvedTool {
     provider: Arc<dyn Provider>,
@@ -132,6 +152,7 @@ impl UtcpClient {
         Ok(client)
     }
 
+    /// Determines the correct call name for a tool based on its provider type.
     fn call_name_for_provider(tool_name: &str, provider_type: &ProviderType) -> String {
         match provider_type {
             ProviderType::Mcp | ProviderType::Text => tool_name
@@ -143,6 +164,8 @@ impl UtcpClient {
         }
     }
 
+    /// Resolves a tool name to a `ResolvedTool` containing the provider and protocol.
+    /// Handles both fully qualified names (provider.tool) and bare names.
     async fn resolve_tool(&self, tool_name: &str) -> Result<ResolvedTool> {
         {
             let cache = self.resolved_tools_cache.read().await;

@@ -4,16 +4,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Trait for loading configuration variables from various sources.
 #[async_trait]
 pub trait UtcpVariablesConfig: Send + Sync {
+    /// Loads all variables from the source.
     async fn load(&self) -> Result<HashMap<String, String>>;
+    /// Gets a single variable by key.
     async fn get(&self, key: &str) -> Result<String>;
 }
 
+/// Configuration for the UTCP client, including variables and provider file paths.
 #[derive(Clone)]
 pub struct UtcpClientConfig {
+    /// Map of inline variables.
     pub variables: HashMap<String, String>,
+    /// Path to the providers configuration file.
     pub providers_file_path: Option<PathBuf>,
+    /// List of variable loaders to use.
     pub load_variables_from: Vec<Arc<dyn UtcpVariablesConfig>>,
 }
 
@@ -28,20 +35,24 @@ impl Default for UtcpClientConfig {
 }
 
 impl UtcpClientConfig {
+    /// Creates a new default configuration.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the path to the providers configuration file.
     pub fn with_providers_file(mut self, path: PathBuf) -> Self {
         self.providers_file_path = Some(path);
         self
     }
 
+    /// Adds a single variable to the configuration.
     pub fn with_variable(mut self, key: String, value: String) -> Self {
         self.variables.insert(key, value);
         self
     }
 
+    /// Adds multiple variables to the configuration.
     pub fn with_variables(mut self, vars: HashMap<String, String>) -> Self {
         self.variables.extend(vars);
         self
@@ -53,6 +64,7 @@ impl UtcpClientConfig {
         self
     }
 
+    /// Retrieves a variable value by key, checking inline variables, loaders, and environment variables in order.
     pub async fn get_variable(&self, key: &str) -> Option<String> {
         // Check inline variables first
         if let Some(val) = self.variables.get(key) {
@@ -71,12 +83,13 @@ impl UtcpClientConfig {
     }
 }
 
-// DotEnv variable loader implementation
+/// A variable loader that reads from a .env file.
 pub struct DotEnvLoader {
     file_path: PathBuf,
 }
 
 impl DotEnvLoader {
+    /// Creates a new DotEnvLoader for the specified file path.
     pub fn new(file_path: PathBuf) -> Self {
         Self { file_path }
     }

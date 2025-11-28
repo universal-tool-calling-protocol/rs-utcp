@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Minimal JSON Schema-like description for tool inputs/outputs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolInputOutputSchema {
     #[serde(rename = "type")]
@@ -27,6 +28,7 @@ pub struct ToolInputOutputSchema {
     pub format: Option<String>,
 }
 
+/// Canonical tool definition used by UTCP transports and repositories.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
     pub name: String,
@@ -40,7 +42,9 @@ pub struct Tool {
     pub provider: Option<serde_json::Value>,
 }
 
+/// Strategy abstraction used to search tools by query string.
 #[async_trait]
 pub trait ToolSearchStrategy: Send + Sync {
+    /// Return tools matching the query string, limited to `limit` results when non-zero.
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>>;
 }

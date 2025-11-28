@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for file-backed text tools.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextProvider {
     #[serde(flatten)]
@@ -27,6 +28,7 @@ impl Provider for TextProvider {
 }
 
 impl TextProvider {
+    /// Create a text provider with an optional base directory for scripts and manifests.
     pub fn new(name: String, base_path: Option<PathBuf>, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

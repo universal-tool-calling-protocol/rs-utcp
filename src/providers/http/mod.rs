@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider configuration for HTTP-based tools.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpProvider {
     #[serde(flatten)]
@@ -35,6 +36,7 @@ impl Provider for HttpProvider {
 }
 
 impl HttpProvider {
+    /// Create an HTTP provider with common defaults (JSON content type and GET/POST URLs).
     pub fn new(name: String, url: String, http_method: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {

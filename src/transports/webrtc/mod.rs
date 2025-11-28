@@ -24,12 +24,14 @@ use crate::transports::{
     ClientTransport,
 };
 
+/// Peer-to-peer transport that relays tool calls over WebRTC data channels.
 pub struct WebRtcTransport {
     // Cache of active peer connections
     connections: Arc<Mutex<HashMap<String, Arc<RTCPeerConnection>>>>,
 }
 
 impl WebRtcTransport {
+    /// Create an empty transport with no cached connections.
     pub fn new() -> Self {
         Self {
             connections: Arc::new(Mutex::new(HashMap::new())),

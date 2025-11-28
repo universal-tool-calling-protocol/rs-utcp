@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::auth::AuthConfig;
 use crate::providers::base::{BaseProvider, Provider, ProviderType};
 
+/// Provider definition for MCP servers reachable over HTTP or stdio.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpProvider {
     #[serde(flatten)]
@@ -37,7 +38,7 @@ impl Provider for McpProvider {
 }
 
 impl McpProvider {
-    // Create HTTP-based MCP provider
+    /// Create an HTTP-based MCP provider.
     pub fn new(name: String, url: String, auth: Option<AuthConfig>) -> Self {
         Self {
             base: BaseProvider {
@@ -53,7 +54,7 @@ impl McpProvider {
         }
     }
 
-    // Create stdio-based MCP provider
+    /// Create a stdio-based MCP provider that spawns a local process.
     pub fn new_stdio(
         name: String,
         command: String,
@@ -74,10 +75,12 @@ impl McpProvider {
         }
     }
 
+    /// True if the provider should be reached via stdio.
     pub fn is_stdio(&self) -> bool {
         self.command.is_some()
     }
 
+    /// True if the provider should be reached via HTTP.
     pub fn is_http(&self) -> bool {
         self.url.is_some()
     }
