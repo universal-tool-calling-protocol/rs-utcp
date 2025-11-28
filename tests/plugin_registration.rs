@@ -9,15 +9,18 @@ use rs_utcp::call_templates::{
     call_template_to_provider, register_call_template_handler, CALL_TEMPLATE_HANDLERS,
 };
 use rs_utcp::providers::base::{Provider, ProviderType};
+use rs_utcp::transports::registry::GLOBAL_COMMUNICATION_PROTOCOLS;
+use rs_utcp::transports::stream::boxed_vec_stream;
 use rs_utcp::transports::{
     communication_protocols_snapshot, register_communication_protocol, CommunicationProtocol,
 };
-use rs_utcp::transports::registry::GLOBAL_COMMUNICATION_PROTOCOLS;
-use rs_utcp::transports::stream::boxed_vec_stream;
 
 fn myproto_template_handler(template: Value) -> anyhow::Result<Value> {
     let mut obj = template.as_object().cloned().unwrap_or_default();
-    obj.insert("marker".to_string(), Value::String("handled by myproto".into()));
+    obj.insert(
+        "marker".to_string(),
+        Value::String("handled by myproto".into()),
+    );
     Ok(Value::Object(obj))
 }
 
@@ -146,12 +149,19 @@ async fn custom_protocol_call_tool_and_stream_are_invoked() {
         .call_tool_stream("demo.stream", args.clone(), &provider)
         .await
         .unwrap();
-    assert_eq!(stream.next().await.unwrap(), Some(json!({ "stream": args.clone() })));
+    assert_eq!(
+        stream.next().await.unwrap(),
+        Some(json!({ "stream": args.clone() }))
+    );
     assert_eq!(stream.next().await.unwrap(), None);
     assert_eq!(protocol.stream_count.load(Ordering::SeqCst), 1);
 
     let captured = protocol.captured_args.lock().unwrap();
-    assert_eq!(captured.len(), 2, "call_tool and call_tool_stream should capture args");
+    assert_eq!(
+        captured.len(),
+        2,
+        "call_tool and call_tool_stream should capture args"
+    );
 
     if let Ok(mut reg) = GLOBAL_COMMUNICATION_PROTOCOLS.write() {
         *reg = registry_before;

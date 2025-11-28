@@ -8,19 +8,19 @@ use crate::transports::CommunicationProtocol;
 /// Plugin-style registry for communication protocols (formerly transports) keyed by call_template_type/provider_type.
 #[derive(Clone, Default)]
 pub struct CommunicationProtocolRegistry {
-    map: HashMap<String, Arc<dyn CommunicationProtocol>>,
+    map: Arc<RwLock<HashMap<String, Arc<dyn CommunicationProtocol>>>>,
 }
 
 impl CommunicationProtocolRegistry {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Build a registry pre-populated with the built-in communication protocols.
     pub fn with_default_protocols() -> Self {
-        let mut reg = Self::new();
+        let reg = Self::new();
         reg.register_default_protocols();
         reg
     }
@@ -30,7 +30,7 @@ impl CommunicationProtocolRegistry {
         Self::with_default_protocols()
     }
 
-    pub fn register_default_protocols(&mut self) {
+    pub fn register_default_protocols(&self) {
         self.register(
             "http",
             Arc::new(crate::transports::http::HttpClientTransport::new()),
@@ -66,16 +66,28 @@ impl CommunicationProtocolRegistry {
         );
     }
 
-    pub fn register(&mut self, key: &str, protocol: Arc<dyn CommunicationProtocol>) {
-        self.map.insert(key.to_string(), protocol);
+    pub fn register(&self, key: &str, protocol: Arc<dyn CommunicationProtocol>) {
+        let mut guard = self
+            .map
+            .write()
+            .expect("communication protocol registry poisoned");
+        guard.insert(key.to_string(), protocol);
     }
 
     pub fn get(&self, key: &str) -> Option<Arc<dyn CommunicationProtocol>> {
-        self.map.get(key).cloned()
+        let guard = self
+            .map
+            .read()
+            .expect("communication protocol registry poisoned");
+        guard.get(key).cloned()
     }
 
     pub fn as_map(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
-        self.map.clone()
+        let guard = self
+            .map
+            .read()
+            .expect("communication protocol registry poisoned");
+        guard.clone()
     }
 }
 
@@ -85,14 +97,14 @@ pub type TransportRegistry = CommunicationProtocolRegistry;
 /// Global, plugin-extensible registry that holds every registered communication protocol.
 pub static GLOBAL_COMMUNICATION_PROTOCOLS: Lazy<RwLock<CommunicationProtocolRegistry>> =
     Lazy::new(|| {
-        let mut reg = CommunicationProtocolRegistry::new();
+        let reg = CommunicationProtocolRegistry::new();
         reg.register_default_protocols();
         RwLock::new(reg)
     });
 
 /// Register a new communication protocol (transport) implementation globally so all clients can use it.
 pub fn register_communication_protocol(key: &str, protocol: Arc<dyn CommunicationProtocol>) {
-    let mut reg = GLOBAL_COMMUNICATION_PROTOCOLS
+    let reg = GLOBAL_COMMUNICATION_PROTOCOLS
         .write()
         .expect("communication protocol registry poisoned");
     reg.register(key, protocol);
@@ -171,10 +183,7 @@ mod tests {
             "text",
         ];
         for key in &expected {
-            assert!(
-                reg.get(key).is_some(),
-                "missing built-in protocol {key}"
-            );
+            assert!(reg.get(key).is_some(), "missing built-in protocol {key}");
         }
         assert_eq!(reg.as_map().len(), expected.len());
     }
@@ -215,8 +224,10 @@ mod tests {
         assert!(snapshot.get(key).is_some(), "global registry missing {key}");
 
         // Clean up to avoid leaking state between tests.
-        if let Ok(mut guard) = GLOBAL_COMMUNICATION_PROTOCOLS.write() {
-            guard.map.remove(key);
+        if let Ok(guard) = GLOBAL_COMMUNICATION_PROTOCOLS.write() {
+            if let Ok(mut map) = guard.map.write() {
+                map.remove(key);
+            }
         }
     }
 }

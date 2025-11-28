@@ -44,5 +44,6 @@ pub trait ClientTransport: Send + Sync {
 pub use ClientTransport as CommunicationProtocol;
 
 pub use registry::{
-    communication_protocols_snapshot, register_communication_protocol, CommunicationProtocolRegistry,
+    communication_protocols_snapshot, register_communication_protocol,
+    CommunicationProtocolRegistry,
 };

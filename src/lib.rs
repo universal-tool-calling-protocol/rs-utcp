@@ -49,9 +49,7 @@ pub trait UtcpClientInterface: Send + Sync {
     ) -> Result<serde_json::Value>;
     async fn search_tools(&self, query: &str, limit: usize) -> Result<Vec<Tool>>;
     fn get_transports(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>>;
-    fn get_communication_protocols(
-        &self,
-    ) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
+    fn get_communication_protocols(&self) -> HashMap<String, Arc<dyn CommunicationProtocol>> {
         self.get_transports()
     }
     async fn call_tool_stream(
@@ -354,12 +352,15 @@ impl UtcpClientInterface for UtcpClient {
         // Get communication protocol
         let provider_type = prov.type_();
         let protocol_key = provider_type.as_key().to_string();
-        let protocol = self.communication_protocols.get(&protocol_key).ok_or_else(|| {
-            anyhow!(
-                "No communication protocol found for provider type: {:?}",
-                provider_type
-            )
-        })?;
+        let protocol = self
+            .communication_protocols
+            .get(&protocol_key)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No communication protocol found for provider type: {:?}",
+                    provider_type
+                )
+            })?;
 
         // Deregister from protocol
         protocol.deregister_tool_provider(prov.as_ref()).await?;

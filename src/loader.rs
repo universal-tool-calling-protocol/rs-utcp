@@ -117,7 +117,8 @@ fn parse_providers_json(json: Value) -> Result<Vec<Value>> {
                 if let Some(arr) = templates_value.as_array() {
                     let mut providers = Vec::new();
                     for template in arr {
-                        providers.push(call_templates::call_template_to_provider(template.clone())?);
+                        providers
+                            .push(call_templates::call_template_to_provider(template.clone())?);
                     }
                     return Ok(providers);
                 }
@@ -226,13 +227,13 @@ fn tool_to_provider(tool: &Value) -> Result<Option<Value>> {
         .ok_or_else(|| anyhow!("Tool must be an object"))?;
 
     if let Some(tmpl) = tool_obj.get("tool_call_template") {
-        Ok(Some(
-            call_templates::call_template_to_provider(tmpl.clone())?,
-        ))
+        Ok(Some(call_templates::call_template_to_provider(
+            tmpl.clone(),
+        )?))
     } else if let Some(prov) = tool_obj.get("provider") {
-        Ok(Some(
-            call_templates::call_template_to_provider(prov.clone())?,
-        ))
+        Ok(Some(call_templates::call_template_to_provider(
+            prov.clone(),
+        )?))
     } else {
         Ok(None)
     }
