@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2]
+
+### Added
+- Apache 2.0 `LICENSE` file to make the MIT/Apache-2.0 licensing explicit
+- CI runs `cargo-llvm-cov` and uploads an HTML coverage report artifact
+- Regression tests covering plugin registration for call template handlers and custom communication protocols
+
+### Changed
+- Communication protocol registry now uses an internal `RwLock` so protocols can be registered globally without mutable access and snapshots stay thread-safe
+
+### Fixed
+- Strip provider prefixes before invoking GraphQL, HTTP stream, WebSocket, and SSE tools so prefixed tool names hit the correct endpoints
+
 ## [0.2.1]
 
 ### Added
