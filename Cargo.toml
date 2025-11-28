@@ -1,6 +1,6 @@
 [package]
 name = "rs-utcp"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "Rust implementation of the Universal Tool Calling Protocol (UTCP)."
 license = "MIT OR Apache-2.0"
@@ -48,3 +48,16 @@ tonic = { version = "0.11", features = ["transport", "tls"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 axum = "0.6"
 uuid = { version = "1", features = ["v4"] }
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+
+[[bench]]
+name = "tool_operations"
+harness = false
+
+[[bench]]
+name = "protocol_comparison"
+harness = false
+
+[[bench]]
+name = "codemode_execution"
+harness = false
