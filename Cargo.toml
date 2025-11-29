@@ -61,3 +61,7 @@ harness = false
 [[bench]]
 name = "codemode_execution"
 harness = false
+
+[[bench]]
+name = "call_tool_comparison"
+harness = false
