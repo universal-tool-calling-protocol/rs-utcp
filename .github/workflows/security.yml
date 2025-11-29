@@ -37,11 +37,13 @@ jobs:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    continue-on-error: true  # Requires GitHub Advanced Security
     steps:
       - uses: actions/checkout@v4
       
       - name: Dependency Review
         uses: actions/dependency-review-action@v3
+        continue-on-error: true
         with:
           fail-on-severity: moderate
 
