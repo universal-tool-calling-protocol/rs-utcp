@@ -17,6 +17,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 use crate::auth::AuthConfig;
 use crate::providers::base::Provider;
 use crate::providers::webrtc::WebRtcProvider;
+use crate::security::{validate_size_limit, validate_url_security};
 use crate::tools::{Tool, ToolInputOutputSchema};
 use crate::transports::{
     stream::{boxed_channel_stream, StreamResult},
@@ -90,6 +91,7 @@ impl WebRtcTransport {
         offer: RTCSessionDescription,
     ) -> Result<RTCSessionDescription> {
         // Send offer to signaling server and get answer
+        validate_url_security(&prov.signaling_server, false)?;
         let client = reqwest::Client::new();
 
         let mut request = client
@@ -217,6 +219,12 @@ impl WebRtcTransport {
             let response_tx = response_tx.clone();
             Box::pin(async move {
                 if let Some(tx) = response_tx.lock().await.take() {
+                    // Validate size
+                    if let Err(e) = validate_size_limit(&msg.data, 10 * 1024 * 1024) {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+
                     let result = serde_json::from_slice::<Value>(&msg.data)
                         .map_err(|e| anyhow!("Failed to parse response: {}", e));
                     let _ = tx.send(result).await;
@@ -392,6 +400,7 @@ impl ClientTransport for WebRtcTransport {
             Box::pin(async move {
                 let parsed = serde_json::from_slice::<Value>(&msg.data)
                     .map_err(|e| anyhow!("Failed to parse stream item: {}", e));
+                let _ = tx.send(parsed).await;
             })
         }));
 
