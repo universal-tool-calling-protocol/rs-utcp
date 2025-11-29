@@ -8,8 +8,11 @@ use std::time::Duration;
 use crate::auth::AuthConfig;
 use crate::providers::base::Provider;
 use crate::providers::http::HttpProvider;
+use crate::security::{validate_size_limit, validate_url_security};
 use crate::tools::Tool;
 use crate::transports::{stream::StreamResult, ClientTransport};
+
+const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 /// Transport for synchronous HTTP providers that expose JSON APIs.
 pub struct HttpClientTransport {
@@ -78,6 +81,7 @@ impl ClientTransport for HttpClientTransport {
 
         // Fetch tool definitions from the HTTP endpoint
         // The endpoint should return a UTCP manifest or OpenAPI spec
+        validate_url_security(&http_prov.url, false)?;
         let mut request_builder = self.client.get(&http_prov.url);
 
         if let Some(headers) = &http_prov.headers {
@@ -101,10 +105,11 @@ impl ClientTransport for HttpClientTransport {
         }
 
         // Try to parse as UTCP manifest first
-        let body_text = response.text().await?;
-
+        let body_bytes = response.bytes().await?;
+        validate_size_limit(&body_bytes, MAX_RESPONSE_SIZE)?;
+        
         // Try parsing as JSON
-        if let Ok(manifest) = serde_json::from_str::<Value>(&body_text) {
+        if let Ok(manifest) = serde_json::from_slice::<Value>(&body_bytes) {
             // Check if it's a UTCP manifest (has "tools" array)
             if let Some(tools_array) = manifest.get("tools").and_then(|v| v.as_array()) {
                 let mut tools = Vec::new();
@@ -148,6 +153,8 @@ impl ClientTransport for HttpClientTransport {
             }
         }
 
+        validate_url_security(&url, false)?;
+
         let method_upper = http_prov.http_method.to_uppercase();
         let mut request_builder = match method_upper.as_str() {
             "GET" => self.client.get(&url),
@@ -190,7 +197,9 @@ impl ClientTransport for HttpClientTransport {
             ));
         }
 
-        let result: Value = response.json().await?;
+        let body_bytes = response.bytes().await?;
+        validate_size_limit(&body_bytes, MAX_RESPONSE_SIZE)?;
+        let result: Value = serde_json::from_slice(&body_bytes)?;
         Ok(result)
     }
 

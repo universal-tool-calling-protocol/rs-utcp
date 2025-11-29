@@ -1,6 +1,7 @@
 // Text Transport (for file-based tool definitions and execution)
 use crate::providers::base::Provider;
 use crate::providers::text::TextProvider;
+use crate::security::validate_file_path;
 use crate::tools::Tool;
 use crate::transports::{stream::StreamResult, ClientTransport};
 use anyhow::{anyhow, Result};
@@ -36,6 +37,11 @@ impl TextTransport {
     }
 
     async fn load_tools_from_file(&self, path: &PathBuf) -> Result<Vec<Tool>> {
+        // Validate path is safe
+        let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid path encoding"))?;
+        let base_str = self.base_path.as_ref().and_then(|p| p.to_str());
+        validate_file_path(path_str, base_str)?;
+
         let contents = fs::read_to_string(path).await?;
 
         // Try to parse as JSON array of tools
@@ -150,6 +156,11 @@ impl ClientTransport for TextTransport {
         let (kind, script_path) = self
             .resolve_script(&base_path, tool_name)
             .ok_or_else(|| anyhow!("Tool script not found for '{}'", tool_name))?;
+
+        // Validate script path is within base path
+        let script_path_str = script_path.to_str().ok_or_else(|| anyhow!("Invalid path encoding"))?;
+        let base_path_str = base_path.to_str();
+        validate_file_path(script_path_str, base_path_str)?;
 
         let args_json = serde_json::to_string(&args)?;
         let mut command = self.build_command(kind, &script_path, &args_json);

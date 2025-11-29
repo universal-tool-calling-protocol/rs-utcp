@@ -12,8 +12,11 @@ use tokio::sync::Mutex;
 use crate::auth::AuthConfig;
 use crate::providers::base::Provider;
 use crate::providers::mcp::McpProvider;
+use crate::security::{validate_size_limit, validate_url_security};
 use crate::tools::Tool;
 use crate::transports::{stream::StreamResult, ClientTransport};
+
+const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 // Stdio process wrapper for MCP transport
 struct McpStdioProcess {
@@ -31,7 +34,8 @@ impl McpStdioProcess {
         env_vars: &Option<HashMap<String, String>>,
     ) -> Result<Self> {
         // Security: Validate command to prevent injection attacks
-        // Allow empty allowlist for flexibility, but validation still checks for dangerous chars
+        // Allow empty allowlist for flexibility (allows all commands), but validation still checks for dangerous chars.
+        // TODO: Make allowlist configurable via McpProvider or global config.
         crate::security::validate_command(command, &[])?;
         
         // Security: Validate arguments
@@ -108,6 +112,8 @@ impl McpStdioProcess {
         if line.is_empty() {
             return Err(anyhow!("MCP process closed connection"));
         }
+
+        validate_size_limit(line.as_bytes(), MAX_RESPONSE_SIZE)?;
 
         let response: Value = serde_json::from_str(&line)?;
 
@@ -190,6 +196,8 @@ impl McpTransport {
             .as_ref()
             .ok_or_else(|| anyhow!("No URL provided for HTTP MCP provider"))?;
 
+        validate_url_security(url, false)?;
+
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": method,
@@ -213,7 +221,9 @@ impl McpTransport {
             return Err(anyhow!("MCP request failed: {}", response.status()));
         }
 
-        let result: Value = response.json().await?;
+        let body_bytes = response.bytes().await?;
+        validate_size_limit(&body_bytes, MAX_RESPONSE_SIZE)?;
+        let result: Value = serde_json::from_slice(&body_bytes)?;
 
         // Check for JSON-RPC error
         if let Some(error) = result.get("error") {
@@ -272,6 +282,8 @@ impl McpTransport {
             .url
             .as_ref()
             .ok_or_else(|| anyhow!("No URL provided for HTTP MCP provider"))?;
+
+        validate_url_security(url, false)?;
 
         let request = serde_json::json!({
             "jsonrpc": "2.0",
