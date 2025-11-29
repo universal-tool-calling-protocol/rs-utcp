@@ -1,6 +1,6 @@
 [package]
 name = "rs-utcp"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "Rust implementation of the Universal Tool Calling Protocol (UTCP)."
 license = "MIT OR Apache-2.0"
@@ -33,7 +33,7 @@ base64 = "0.21"
 bytes = "1"
 rhai = { version = "1.18", features = ["serde"] }
 eventsource-stream = "0.2"
-webrtc = "0.9"
+webrtc = "0.14"
 
 [build-dependencies]
 tonic-build = "0.11"

@@ -36,12 +36,23 @@ pub enum AuthError {
 }
 
 /// API key authentication descriptor used by HTTP-like transports.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ApiKeyAuth {
     pub auth_type: AuthType,
     pub api_key: String,
     pub var_name: String,
     pub location: String, // "header", "query", or "cookie"
+}
+
+impl std::fmt::Debug for ApiKeyAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKeyAuth")
+            .field("auth_type", &self.auth_type)
+            .field("api_key", &"[REDACTED]")
+            .field("var_name", &self.var_name)
+            .field("location", &self.location)
+            .finish()
+    }
 }
 
 impl ApiKeyAuth {
@@ -73,11 +84,21 @@ impl Auth for ApiKeyAuth {
 }
 
 /// Basic authentication descriptor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BasicAuth {
     pub auth_type: AuthType,
     pub username: String,
     pub password: String,
+}
+
+impl std::fmt::Debug for BasicAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BasicAuth")
+            .field("auth_type", &self.auth_type)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 impl BasicAuth {
@@ -108,7 +129,7 @@ impl Auth for BasicAuth {
 }
 
 /// OAuth2 client credentials descriptor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OAuth2Auth {
     pub auth_type: AuthType,
     pub token_url: String,
@@ -116,6 +137,18 @@ pub struct OAuth2Auth {
     pub client_secret: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+}
+
+impl std::fmt::Debug for OAuth2Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OAuth2Auth")
+            .field("auth_type", &self.auth_type)
+            .field("token_url", &self.token_url)
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("scope", &self.scope)
+            .finish()
+    }
 }
 
 impl OAuth2Auth {

@@ -9,6 +9,7 @@ pub mod openapi;
 pub mod plugins;
 pub mod providers;
 pub mod repository;
+pub mod security;
 pub mod spec;
 pub mod tag;
 pub mod tools;

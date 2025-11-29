@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2025-11-29
+
+### Added
+- **Security Module** - New `security` module with validators for:
+  - Command injection prevention (validates commands and arguments)
+  - Path traversal protection (validates file paths)
+  - URL security enforcement (HTTPS/TLS validation)
+  - Size limit validation (DoS prevention)
+  - Timeout validation
+- **SECURITY.md** - Comprehensive security documentation including:
+  - Security best practices and guidelines
+  - Known vulnerabilities and mitigation strategies
+  - Secure configuration examples
+  - Security checklist for production deployments
+- **GitHub Actions Security Workflow** - Automated security auditing:
+  - cargo-audit for dependency vulnerability scanning
+  - Dependency review for pull requests
+  - Clippy security lints
+
+### Changed
+- **Authentication Credentials Protection** - Implemented custom `Debug` trait for:
+  - `ApiKeyAuth` - Redacts API keys in debug output
+  - `BasicAuth` - Redacts passwords in debug output
+  - `OAuth2Auth` - Redacts client secrets in debug output
+- **MCP Stdio Transport** - Added command injection prevention:
+  - Validates command names for dangerous shell characters
+  - Validates arguments for shell operators and command substitution
+- **Codemode Security** - Enhanced Rhai script sandboxing:
+  - Set operation limits (100,000 max operations) to prevent infinite loops
+  - Set expression depth limits (64/32) to prevent stack overflow
+  - Set string size limit (1MB) to prevent memory exhaustion
+  - Set array/map size limits (10,000) to prevent memory exhaustion
+  - Set module limit (16) to restrict imports
+  - File I/O disabled by default
+
+### Security
+- **Fixed RUSTSEC-2025-0009**: Upgraded `webrtc` from 0.9 to 0.14, which removed the vulnerable `ring 0.16.20` dependency and now uses only the safe `ring 0.17.14+`
+  - Resolves: Some AES functions may panic when overflow checking is enabled
+  - Impact: Prevents potential denial of service in WebRTC transport
+- Prevents credential leakage through debug logs and error messages
+- Mitigates command injection attacks in CLI and MCP stdio providers
+- Protects against DoS attacks through Rhai script abuse
+- Automated dependency vulnerability monitoring via GitHub Actions
+
 ## [0.2.4] - 2025-11-28
 
 ### Added
