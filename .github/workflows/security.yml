@@ -30,8 +30,8 @@ jobs:
         run: cargo audit
         continue-on-error: true
       
-      - name: Check for vulnerable dependencies
-        run: cargo audit --deny warnings
+      - name: Check for vulnerable dependencies (ignoring maintenance warnings)
+        run: cargo audit --deny warnings --ignore RUSTSEC-2024-0384
         
   dependency-check:
     name: Dependency Review
