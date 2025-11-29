@@ -1,15 +1,19 @@
 // GraphQL Transport - queries, mutations, and subscriptions
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use base64::Engine;
+use futures::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use tokio::sync::mpsc;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use crate::auth::AuthConfig;
 use crate::providers::base::Provider;
 use crate::providers::graphql::GraphqlProvider;
 use crate::tools::{Tool, ToolInputOutputSchema};
-use crate::transports::{stream::StreamResult, ClientTransport};
+use crate::transports::{stream::{boxed_channel_stream, StreamResult}, ClientTransport};
 
 /// Transport that maps GraphQL operations to UTCP tools.
 pub struct GraphQLTransport {
@@ -275,13 +279,247 @@ impl ClientTransport for GraphQLTransport {
 
     async fn call_tool_stream(
         &self,
-        _tool_name: &str,
-        _args: HashMap<String, Value>,
-        _prov: &dyn Provider,
+        tool_name: &str,
+        args: HashMap<String, Value>,
+        prov: &dyn Provider,
     ) -> Result<Box<dyn StreamResult>> {
-        Err(anyhow!(
-            "GraphQL subscriptions require WebSocket transport; use WebSocket transport instead"
-        ))
+        let gql_prov = prov
+            .as_any()
+            .downcast_ref::<GraphqlProvider>()
+            .ok_or_else(|| anyhow!("Provider is not a GraphqlProvider"))?;
+
+        let call_name = tool_name
+            .strip_prefix(&format!("{}.", gql_prov.base.name))
+            .unwrap_or(tool_name);
+
+        let operation_type = Self::infer_operation(&gql_prov.operation_type, call_name);
+        
+        // GraphQL subscriptions must be sent over WebSocket
+        if operation_type != "subscription" {
+            return Err(anyhow!(
+                "call_tool_stream is only for GraphQL subscriptions; '{}' is a {}",
+                call_name,
+                operation_type
+            ));
+        }
+
+        let operation_name = gql_prov
+            .operation_name
+            .clone()
+            .unwrap_or_else(|| call_name.to_string());
+
+        // Build the subscription query with variables
+        let mut arg_defs = Vec::new();
+        let mut arg_uses = Vec::new();
+        let mut variables = HashMap::new();
+
+        for (key, value) in args {
+            let (type_name, normalized_value) = Self::normalize_arg_value(&key, value);
+            arg_defs.push(format!("${}: {}", key, type_name));
+            arg_uses.push(format!("{}: ${}", key, key));
+            variables.insert(key, normalized_value);
+        }
+
+        let subscription_query = if !arg_defs.is_empty() {
+            format!(
+                "{} {}({}) {{ {}({}) }}",
+                operation_type,
+                operation_name,
+                arg_defs.join(", "),
+                call_name,
+                arg_uses.join(", ")
+            )
+        } else {
+            format!("{} {{ {} }}", operation_type, call_name)
+        };
+
+        // Convert HTTP URL to WebSocket URL
+        let mut ws_url = gql_prov
+            .url
+            .replace("http://", "ws://")
+            .replace("https://", "wss://");
+
+        // Handle query-based authentication
+        if let Some(AuthConfig::ApiKey(api_key)) = &gql_prov.base.auth {
+            if api_key.location.to_ascii_lowercase() == "query" {
+                let separator = if ws_url.contains('?') { "&" } else { "?" };
+                ws_url = format!("{}{}{}={}", ws_url, separator, api_key.var_name, api_key.api_key);
+            }
+        }
+
+        // Build the WebSocket request with proper headers
+        let mut req = tokio_tungstenite::tungstenite::http::Request::builder()
+            .uri(&ws_url)
+            .header("Host", ws_url.split('/').nth(2).unwrap_or("localhost"))
+            .header("Connection", "Upgrade")
+            .header("Upgrade", "websocket")
+            .header("Sec-WebSocket-Version", "13")
+            .header("Sec-WebSocket-Key", tokio_tungstenite::tungstenite::handshake::client::generate_key())
+            .header("Sec-WebSocket-Protocol", "graphql-transport-ws")
+            .body(())?;
+
+        // Apply authentication to WebSocket request (except query which was handled above)
+        if let Some(auth) = &gql_prov.base.auth {
+            match auth {
+                AuthConfig::ApiKey(api_key) => {
+                    let location = api_key.location.to_ascii_lowercase();
+                    match location.as_str() {
+                        "header" => {
+                            use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
+                            let name = HeaderName::from_bytes(api_key.var_name.as_bytes())
+                                .map_err(|_| anyhow!("Invalid header name"))?;
+                            let value = HeaderValue::from_str(&api_key.api_key)
+                                .map_err(|_| anyhow!("Invalid header value"))?;
+                            req.headers_mut().insert(name, value);
+                        }
+                        "cookie" => {
+                            use tokio_tungstenite::tungstenite::http::HeaderValue;
+                            let cookie_value = format!("{}={}", api_key.var_name, api_key.api_key);
+                            let value = HeaderValue::from_str(&cookie_value)
+                                .map_err(|_| anyhow!("Invalid cookie value"))?;
+                            req.headers_mut().insert("cookie", value);
+                        }
+                        "query" => {
+                            // Already handled above
+                        }
+                        other => return Err(anyhow!("Unsupported API key location for WebSocket: {}", other)),
+                    }
+                }
+                AuthConfig::Basic(basic) => {
+                    use tokio_tungstenite::tungstenite::http::HeaderValue;
+                    let credentials = format!("{}:{}", basic.username, basic.password);
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(credentials.as_bytes());
+                    let value = HeaderValue::from_str(&format!("Basic {}", encoded))
+                        .map_err(|_| anyhow!("Invalid auth header"))?;
+                    req.headers_mut().insert("authorization", value);
+                }
+                AuthConfig::OAuth2(_) => {
+                    return Err(anyhow!("OAuth2 is not supported for GraphQL WebSocket subscriptions"));
+                }
+            }
+        }
+
+        // Apply custom headers if any
+        if let Some(headers) = &gql_prov.headers {
+            use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
+            for (k, v) in headers {
+                let name = HeaderName::from_bytes(k.as_bytes())
+                    .map_err(|_| anyhow!("Invalid header name: {}", k))?;
+                let value = HeaderValue::from_str(v)
+                    .map_err(|_| anyhow!("Invalid header value: {}", v))?;
+                req.headers_mut().insert(name, value);
+            }
+        }
+
+        let (mut ws_stream, _) = connect_async(req).await?;
+
+        // Send connection_init message (graphql-transport-ws protocol)
+        ws_stream
+            .send(Message::Text(
+                json!({
+                    "type": "connection_init"
+                })
+                .to_string(),
+            ))
+            .await?;
+
+        // Wait for connection_ack
+        if let Some(msg) = ws_stream.next().await {
+            match msg? {
+                Message::Text(text) => {
+                    let ack: Value = serde_json::from_str(&text)?;
+                    if ack.get("type").and_then(|v| v.as_str()) != Some("connection_ack") {
+                        return Err(anyhow!("Expected connection_ack, got: {}", text));
+                    }
+                }
+                _ => return Err(anyhow!("Expected text message for connection_ack")),
+            }
+        }
+
+        // Send subscription message
+        let subscription_id = "1"; // Simple ID for single subscription
+        let subscribe_msg = json!({
+            "id": subscription_id,
+            "type": "subscribe",
+            "payload": {
+                "query": subscription_query,
+                "variables": variables,
+            }
+        });
+
+        ws_stream
+            .send(Message::Text(subscribe_msg.to_string()))
+            .await?;
+
+        // Create channel for streaming results
+        let (tx, rx) = mpsc::channel(256);
+
+        // Spawn task to handle incoming subscription messages
+        tokio::spawn(async move {
+            while let Some(msg) = ws_stream.next().await {
+                match msg {
+                    Ok(Message::Text(text)) => {
+                        let parsed = match serde_json::from_str::<Value>(&text) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = tx
+                                    .send(Err(anyhow!("Failed to parse WebSocket message: {}", e)))
+                                    .await;
+                                break;
+                            }
+                        };
+
+                        let msg_type = parsed.get("type").and_then(|v| v.as_str());
+                        match msg_type {
+                            Some("next") => {
+                                // Extract data from payload
+                                if let Some(payload) = parsed.get("payload") {
+                                    if let Some(data) = payload.get("data") {
+                                        if tx.send(Ok(data.clone())).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    // Check for errors in payload
+                                    if let Some(errors) = payload.get("errors") {
+                                        let _ = tx
+                                            .send(Err(anyhow!("GraphQL subscription error: {}", errors)))
+                                            .await;
+                                        break;
+                                    }
+                                }
+                            }
+                            Some("error") => {
+                                let error_msg = parsed
+                                    .get("payload")
+                                    .map(|p| p.to_string())
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                let _ = tx
+                                    .send(Err(anyhow!("GraphQL subscription error: {}", error_msg)))
+                                    .await;
+                                break;
+                            }
+                            Some("complete") => {
+                                // Subscription completed normally
+                                break;
+                            }
+                            _ => {
+                                // Ignore other message types (ping, pong, etc.)
+                            }
+                        }
+                    }
+                    Ok(Message::Close(_)) => break,
+                    Ok(_) => {} // Ignore binary, ping, pong
+                    Err(err) => {
+                        let _ = tx
+                            .send(Err(anyhow!("WebSocket error: {}", err)))
+                            .await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(boxed_channel_stream(rx, None))
     }
 }
 
@@ -413,12 +651,13 @@ mod tests {
             .expect("call");
         assert_eq!(result["hello"]["msg"], "hi");
 
+        // call_tool_stream should fail for queries (non-subscriptions)
         let err = transport
             .call_tool_stream("hello", HashMap::new(), &prov)
             .await
             .err()
             .expect("stream error");
-        assert!(err.to_string().contains("GraphQL subscriptions"));
+        assert!(err.to_string().contains("only for GraphQL subscriptions"));
     }
 
     #[tokio::test]
@@ -474,5 +713,113 @@ mod tests {
             .expect("call tool");
 
         assert_eq!(result, json!({ "echo": json!({ "msg": "hi" }) }));
+    }
+
+    #[tokio::test]
+    async fn graphql_subscription_streams_data() {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio::net::TcpListener;
+        use tokio_tungstenite::accept_async;
+
+        // Create a mock GraphQL subscription server
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            if let Ok((stream, _)) = listener.accept().await {
+                // Accept any WebSocket connection
+                if let Ok(mut ws) = accept_async(stream).await {
+                    // Receive connection_init
+                    if let Some(Ok(Message::Text(text))) = ws.next().await {
+                        let init: Value = serde_json::from_str(&text).unwrap();
+                        if init.get("type").and_then(|v| v.as_str()) == Some("connection_init") {
+                            // Send connection_ack
+                            let _ = ws.send(Message::Text(json!({ "type": "connection_ack" }).to_string())).await;
+
+                            // Receive subscription message
+                            if let Some(Ok(Message::Text(text))) = ws.next().await {
+                                let sub: Value = serde_json::from_str(&text).unwrap();
+                                if sub.get("type").and_then(|v| v.as_str()) == Some("subscribe") {
+                                    // Send multiple streaming events
+                                    for i in 1..=3 {
+                                        let _ = ws.send(Message::Text(
+                                            json!({
+                                                "id": "1",
+                                                "type": "next",
+                                                "payload": {
+                                                    "data": {
+                                                        "messageAdded": {
+                                                            "id": i,
+                                                            "content": format!("Message {}", i)
+                                                        }
+                                                    }
+                                                }
+                                            })
+                                            .to_string(),
+                                        )).await;
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                    }
+
+                                    // Send complete message
+                                    let _ = ws.send(Message::Text(
+                                        json!({
+                                            "id": "1",
+                                            "type": "complete"
+                                        })
+                                        .to_string(),
+                                    )).await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Give server time to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let prov = GraphqlProvider {
+            base: crate::providers::base::BaseProvider {
+                name: "gql".to_string(),
+                provider_type: crate::providers::base::ProviderType::Graphql,
+                auth: None,
+            },
+            url: format!("http://{}", addr),
+            operation_type: "subscription".to_string(),
+            operation_name: Some("MessageAdded".to_string()),
+            headers: None,
+        };
+
+        let transport = GraphQLTransport::new();
+        let mut stream = transport
+            .call_tool_stream("messageAdded", HashMap::new(), &prov)
+            .await
+            .expect("stream created");
+
+        // Collect streaming results
+        let mut results = Vec::new();
+        while let Ok(Some(value)) = stream.next().await {
+            results.push(value);
+            if results.len() >= 3 {
+                break;
+            }
+        }
+
+        assert_eq!(results.len(), 3);
+        for (i, result) in results.iter().enumerate() {
+            let expected_id = i + 1;
+            assert_eq!(
+                result["messageAdded"]["id"],
+                expected_id,
+                "Expected message {} to have id {}",
+                i,
+                expected_id
+            );
+            assert_eq!(
+                result["messageAdded"]["content"],
+                format!("Message {}", expected_id)
+            );
+        }
     }
 }

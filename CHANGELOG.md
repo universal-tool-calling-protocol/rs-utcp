@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **GraphQL Subscription Support** - Implemented `call_tool_stream` for GraphQL subscriptions:
+  - WebSocket-based subscription transport using the `graphql-transport-ws` protocol
+  - Automatic conversion of HTTP/HTTPS URLs to ws:// wss:// for subscriptions
+  - Support for all authentication methods (API Key, Basic Auth) in WebSocket headers
+  - Proper handling of subscription lifecycle (connection_init, subscribe, next, complete, error)
+  - Real-time streaming of subscription data through the `StreamResult` interface
+  - Added `graphql_subscription.rs` example demonstrating stock price updates streaming
+  - Comprehensive test coverage for subscription protocol implementation
+
+### Changed
+- GraphQL transport now validates that `call_tool_stream` is only used for subscription operations
+
 ## [0.2.6] - 2025-11-29
 
 ### Security
