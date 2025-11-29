@@ -8,7 +8,6 @@ use tokio::sync::{mpsc, Mutex};
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
-use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
@@ -57,22 +56,15 @@ impl WebRtcTransport {
         &self,
         prov: &WebRtcProvider,
     ) -> Result<Arc<RTCPeerConnection>> {
-        // Configure ICE servers
+        // Configure ICE servers (credential_type field removed in WebRTC 0.14)
         let ice_servers: Vec<RTCIceServer> = prov
             .ice_servers
             .iter()
             .map(|server| {
-                let credential_type = if server.username.is_some() {
-                    RTCIceCredentialType::Password
-                } else {
-                    RTCIceCredentialType::Unspecified
-                };
-
                 RTCIceServer {
                     urls: server.urls.clone(),
                     username: server.username.clone().unwrap_or_default(),
                     credential: server.credential.clone().unwrap_or_default(),
-                    credential_type,
                 }
             })
             .collect();

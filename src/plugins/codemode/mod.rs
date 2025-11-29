@@ -90,6 +90,18 @@ impl CodeModeUtcp {
 
     fn build_engine(&self) -> Engine {
         let mut engine = Engine::new();
+        
+        // Security: Disable dangerous operations
+        engine.set_max_expr_depths(64, 32); // Limit expression depth to prevent stack overflow
+        engine.set_max_operations(100_000); // Limit total operations to prevent infinite loops
+        engine.set_max_modules(16); // Limit number of modules
+        engine.set_max_string_size(1_000_000); // 1MB string limit
+        engine.set_max_array_size(10_000); // Limit array sizes
+        engine.set_max_map_size(10_000); // Limit map sizes
+        
+        // Note: File I/O and other dangerous operations are disabled by default in Rhai
+        // when not explicitly importing the std modules
+        
         engine.register_fn("sprintf", sprintf);
 
         let client = self.client.clone();

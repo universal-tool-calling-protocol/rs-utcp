@@ -30,6 +30,15 @@ impl McpStdioProcess {
         args: &Option<Vec<String>>,
         env_vars: &Option<HashMap<String, String>>,
     ) -> Result<Self> {
+        // Security: Validate command to prevent injection attacks
+        // Allow empty allowlist for flexibility, but validation still checks for dangerous chars
+        crate::security::validate_command(command, &[])?;
+        
+        // Security: Validate arguments
+        if let Some(args_vec) = args {
+            crate::security::validate_command_args(args_vec)?;
+        }
+        
         let mut cmd = Command::new(command);
 
         if let Some(args_vec) = args {
