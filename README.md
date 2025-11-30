@@ -276,6 +276,17 @@ match result {
 
 See the [Gemini example](examples/orchestrator_gemini.rs) for a complete LLM integration.
 
+### Codemode Security
+
+Codemode executes scripts in a **hardened sandbox** with comprehensive security measures:
+
+- ✅ **Code Validation** - Pre-execution checks for dangerous patterns and size limits
+- ✅ **Timeout Enforcement** - Strict timeouts (5s default, 30s max) prevent runaway scripts
+- ✅ **Resource Limits** - Memory, CPU, and output size constraints
+- ✅ **Sandboxed Execution** - Rhai scripts run isolated from the file system and OS
+
+See [SECURITY.md](SECURITY.md) for complete security documentation.
+
 ## 🎯 Use Cases
 
 ### 1. **Multi-Protocol API Gateway**
@@ -298,6 +309,7 @@ Easily swap implementations (e.g., HTTP → CLI) for testing without code change
 - **[API Documentation](https://docs.rs/rs-utcp)** - Complete API reference
 - **[UTCP Specification](https://www.utcp.io)** - Protocol specification
 - **[Examples](/examples)** - Working examples for all transports
+- **[SECURITY](SECURITY.md)** - Security features and best practices
 - **[CHANGELOG](CHANGELOG.md)** - Version history and changes
 
 ## 🧪 Testing
