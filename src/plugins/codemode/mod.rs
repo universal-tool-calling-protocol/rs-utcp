@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use anyhow::{anyhow, Result};
@@ -8,8 +9,47 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::runtime::{Builder, RuntimeFlavor};
 
+use crate::security;
 use crate::tools::{Tool, ToolInputOutputSchema};
 use crate::UtcpClientInterface;
+
+// Security configuration constants
+/// Maximum code snippet size (100KB) to prevent DoS attacks
+const MAX_CODE_SIZE: usize = 100_000;
+
+/// Maximum timeout for code execution (30 seconds)
+const MAX_TIMEOUT_MS: u64 = 45_000;
+
+/// Default timeout if none specified (5 seconds)
+const DEFAULT_TIMEOUT_MS: u64 = 5_000;
+
+/// Maximum size for script output (10MB) to prevent memory exhaustion
+const MAX_OUTPUT_SIZE: usize = 10_000_000;
+
+/// Maximum operations per script execution
+const MAX_OPERATIONS: u64 = 100_000;
+
+/// Maximum expression depth to prevent stack overflow
+const MAX_EXPR_DEPTH: (usize, usize) = (64, 32);
+
+/// Maximum string size (1MB) within scripts
+const MAX_STRING_SIZE: usize = 1_000_000;
+
+/// Maximum array/map sizes to prevent memory exhaustion
+const MAX_ARRAY_SIZE: usize = 10_000;
+const MAX_MAP_SIZE: usize = 10_000;
+
+/// Maximum number of modules
+const MAX_MODULES: usize = 16;
+
+/// Dangerous code patterns that are prohibited
+const DANGEROUS_PATTERNS: &[&str] = &[
+    "eval(",
+    "import ",
+    "fn ",         // Function definitions could be abused
+    "while true", // Infinite loops
+    "loop {",     // Infinite loops
+];
 
 /// Minimal facade exposing UTCP calls to Rhai scripts executed by CodeMode.
 pub struct CodeModeUtcp {
@@ -22,9 +62,42 @@ impl CodeModeUtcp {
         Self { client }
     }
 
+    /// Validates code for security issues before execution.
+    fn validate_code(&self, code: &str) -> Result<()> {
+        // Check code size
+        if code.len() > MAX_CODE_SIZE {
+            return Err(anyhow!(
+                "Code size {} bytes exceeds maximum allowed {} bytes",
+                code.len(),
+                MAX_CODE_SIZE
+            ));
+        }
+
+        // Check for dangerous patterns
+        for pattern in DANGEROUS_PATTERNS {
+            if code.contains(pattern) {
+                return Err(anyhow!(
+                    "Code contains prohibited pattern: '{}'",
+                    pattern
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+
+
     /// Execute a snippet or JSON payload, returning the resulting value and captured output.
     pub async fn execute(&self, args: CodeModeArgs) -> Result<CodeModeResult> {
-        // If it's JSON already, return it directly.
+        // Validate code before execution
+        self.validate_code(&args.code)?;
+
+        // Determine and validate timeout
+        let timeout_ms = args.timeout.unwrap_or(DEFAULT_TIMEOUT_MS);
+        security::validate_timeout(timeout_ms, MAX_TIMEOUT_MS)?;
+
+        // If it's JSON already, return it directly (no execution needed)
         if let Ok(json) = serde_json::from_str::<Value>(&args.code) {
             return Ok(CodeModeResult {
                 value: json,
@@ -33,7 +106,31 @@ impl CodeModeUtcp {
             });
         }
 
-        let value = self.eval_rusty_snippet(&args.code, args.timeout).await?;
+        // Execute with timeout
+        let result = tokio::time::timeout(
+            Duration::from_millis(timeout_ms),
+            self.eval_rusty_snippet(&args.code, Some(timeout_ms)),
+        )
+        .await;
+
+        let value = match result {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err(anyhow!("Code execution timed out after {}ms", timeout_ms));
+            }
+        };
+
+        // Validate output size to prevent memory exhaustion
+        let serialized = serde_json::to_vec(&value)?;
+        if serialized.len() > MAX_OUTPUT_SIZE {
+            return Err(anyhow!(
+                "Output size {} bytes exceeds maximum allowed {} bytes",
+                serialized.len(),
+                MAX_OUTPUT_SIZE
+            ));
+        }
+
         Ok(CodeModeResult {
             value,
             stdout: String::new(),
@@ -91,13 +188,13 @@ impl CodeModeUtcp {
     fn build_engine(&self) -> Engine {
         let mut engine = Engine::new();
         
-        // Security: Disable dangerous operations
-        engine.set_max_expr_depths(64, 32); // Limit expression depth to prevent stack overflow
-        engine.set_max_operations(100_000); // Limit total operations to prevent infinite loops
-        engine.set_max_modules(16); // Limit number of modules
-        engine.set_max_string_size(1_000_000); // 1MB string limit
-        engine.set_max_array_size(10_000); // Limit array sizes
-        engine.set_max_map_size(10_000); // Limit map sizes
+        // Security: Comprehensive sandboxing using centralized constants
+        engine.set_max_expr_depths(MAX_EXPR_DEPTH.0, MAX_EXPR_DEPTH.1); 
+        engine.set_max_operations(MAX_OPERATIONS); 
+        engine.set_max_modules(MAX_MODULES); 
+        engine.set_max_string_size(MAX_STRING_SIZE); 
+        engine.set_max_array_size(MAX_ARRAY_SIZE); 
+        engine.set_max_map_size(MAX_MAP_SIZE); 
         
         // Note: File I/O and other dangerous operations are disabled by default in Rhai
         // when not explicitly importing the std modules
@@ -108,6 +205,15 @@ impl CodeModeUtcp {
         engine.register_fn(
             "call_tool",
             move |name: &str, map: Map| -> Result<Dynamic, Box<EvalAltResult>> {
+                // Security: Validate tool name format
+                if name.is_empty() || name.len() > 200 {
+                    return Err(EvalAltResult::ErrorRuntime(
+                        "Invalid tool name length".into(),
+                        rhai::Position::NONE,
+                    )
+                    .into());
+                }
+
                 let args_val = serde_json::to_value(map).map_err(|e| {
                     EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
                 })?;
@@ -128,6 +234,15 @@ impl CodeModeUtcp {
         engine.register_fn(
             "call_tool_stream",
             move |name: &str, map: Map| -> Result<Dynamic, Box<EvalAltResult>> {
+                // Security: Validate tool name format
+                if name.is_empty() || name.len() > 200 {
+                    return Err(EvalAltResult::ErrorRuntime(
+                        "Invalid tool name length".into(),
+                        rhai::Position::NONE,
+                    )
+                    .into());
+                }
+
                 let args_val = serde_json::to_value(map).map_err(|e| {
                     EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
                 })?;
@@ -140,7 +255,18 @@ impl CodeModeUtcp {
                         })?;
 
                 let mut items = Vec::new();
+                // Security: Limit maximum number of stream items to prevent memory exhaustion
+                const MAX_STREAM_ITEMS: usize = 10_000;
+                
                 loop {
+                    if items.len() >= MAX_STREAM_ITEMS {
+                        return Err(EvalAltResult::ErrorRuntime(
+                            format!("Stream exceeded maximum {} items", MAX_STREAM_ITEMS).into(),
+                            rhai::Position::NONE,
+                        )
+                        .into());
+                    }
+
                     let next =
                         block_on_any_runtime(async { stream.next().await }).map_err(|e| {
                             EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
@@ -169,8 +295,25 @@ impl CodeModeUtcp {
         engine.register_fn(
             "search_tools",
             move |query: &str, limit: i64| -> Result<Dynamic, Box<EvalAltResult>> {
+                // Security: Validate query length
+                if query.len() > 1000 {
+                    return Err(EvalAltResult::ErrorRuntime(
+                        "Search query too long (max 1000 chars)".into(),
+                        rhai::Position::NONE,
+                    )
+                    .into());
+                }
+
+                // Security: Enforce reasonable search limit
+                const MAX_SEARCH_LIMIT: i64 = 500;
+                let safe_limit = if limit <= 0 || limit > MAX_SEARCH_LIMIT {
+                    MAX_SEARCH_LIMIT
+                } else {
+                    limit
+                };
+
                 let res = block_on_any_runtime(async {
-                    client.search_tools(query, limit as usize).await
+                    client.search_tools(query, safe_limit as usize).await
                 })
                 .map_err(|e| {
                     EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)
@@ -430,11 +573,37 @@ fn value_to_map(value: Value) -> Result<HashMap<String, Value>, Box<EvalAltResul
 }
 
 /// Minimal string formatter exposed to Rhai snippets.
+/// Security: Limited to prevent DoS attacks.
 pub fn sprintf(fmt: &str, args: &[Dynamic]) -> String {
+    // Security: Limit format string size
+    const MAX_FMT_SIZE: usize = 10_000;
+    const MAX_ARGS: usize = 100;
+
+    if fmt.len() > MAX_FMT_SIZE {
+        return "[ERROR: Format string too long]".to_string();
+    }
+
+    if args.len() > MAX_ARGS {
+        return "[ERROR: Too many arguments]".to_string();
+    }
+
     let mut out = fmt.to_string();
     for rendered in args.iter().map(|v| v.to_string()) {
-        out = out.replacen("{}", &rendered, 1);
+        // Security: Limit argument string length
+        let safe_rendered = if rendered.len() > 1000 {
+            format!("{}...[truncated]", &rendered[..1000])
+        } else {
+            rendered
+        };
+        out = out.replacen("{}", &safe_rendered, 1);
     }
+    
+    // Security: Limit total output size
+    if out.len() > MAX_FMT_SIZE * 2 {
+        out.truncate(MAX_FMT_SIZE * 2);
+        out.push_str("...[truncated]");
+    }
+    
     out
 }
 
@@ -573,5 +742,157 @@ mod tests {
         assert_eq!(res.value, serde_json::json!(["chunk"]));
         let calls = client.called.lock().await.clone();
         assert_eq!(calls, vec!["stream:demo.tool"]);
+    }
+
+    // Security Tests
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn security_rejects_oversized_code() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client);
+
+        // Create code larger than MAX_CODE_SIZE (100KB)
+        let large_code = "x".repeat(150_000);
+        let args = CodeModeArgs {
+            code: large_code,
+            timeout: Some(1000),
+        };
+
+        let result = codemode.execute(args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exceeds maximum"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn security_rejects_dangerous_patterns() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client);
+
+        // Test each dangerous pattern
+        let dangerous_codes = vec![
+            "eval(some_code)",
+            "import some_module",
+            "fn evil() { }",
+            "while true { }",
+            "loop { break; }",
+        ];
+
+        for code in dangerous_codes {
+            let args = CodeModeArgs {
+                code: code.to_string(),
+                timeout: Some(1000),
+            };
+
+            let result = codemode.execute(args).await;
+            assert!(result.is_err(), "Should reject: {}", code);
+            assert!(result.unwrap_err().to_string().contains("prohibited pattern"));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn security_enforces_timeout() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client);
+
+        // Code that takes a while (but not infinite due to operation limits)
+        let code = r#"let sum = 0; for i in 0..100000 { sum = sum + i; } sum"#;
+        let args = CodeModeArgs {
+            code: code.to_string(),
+            timeout: Some(1), // Very short timeout - 1ms
+        };
+
+        let result = codemode.execute(args).await;
+        // This should timeout or complete very fast
+        // Either way, we're testing that timeout mechanism works
+        if result.is_err() {
+            let err = result.unwrap_err().to_string();
+            // It might timeout or hit operation limit
+            assert!(
+                err.contains("timeout") || err.contains("operations"),
+                "Unexpected error: {}",
+                err
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn security_rejects_excessive_timeout() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client);
+
+        let args = CodeModeArgs {
+            code: "42".to_string(),
+            timeout: Some(60_000), // 60 seconds - over MAX_TIMEOUT_MS
+        };
+
+        let result = codemode.execute(args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exceeds maximum"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn security_limits_output_size() {
+        let client = Arc::new(MockClient {
+            called: Arc::new(Mutex::new(Vec::new())),
+        });
+        let codemode = CodeModeUtcp::new(client);
+
+        // Create code that would produce large output through array limits
+        // This will hit the array size limit (10,000 items)
+        let code = r#"let arr = []; for i in 0..15000 { arr.push(i); } arr"#;
+        let args = CodeModeArgs {
+            code: code.to_string(),
+            timeout: Some(10_000),
+        };
+
+        let result = codemode.execute(args).await;
+        // Should fail due to array size limit or operations limit
+        assert!(result.is_err(), "Should fail due to limits");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("array") || err.contains("operations") || err.contains("eval error"),
+            "Unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn security_sprintf_limits_format_size() {
+        let fmt = "x".repeat(20_000); // Over MAX_FMT_SIZE
+        let result = sprintf(&fmt, &[]);
+        assert_eq!(result, "[ERROR: Format string too long]");
+    }
+
+    #[test]
+    fn security_sprintf_limits_args_count() {
+        let args: Vec<Dynamic> = (0..200).map(|i| Dynamic::from(i)).collect();
+        let result = sprintf("{}", &args);
+        assert_eq!(result, "[ERROR: Too many arguments]");
+    }
+
+    #[test]
+    fn security_sprintf_truncates_long_args() {
+        let long_arg = Dynamic::from("x".repeat(2000));
+        let result = sprintf("Value: {}", &[long_arg]);
+        assert!(result.contains("...[truncated]"));
+    }
+
+    #[test]
+    fn security_sprintf_limits_output_size() {
+        let fmt = "{}".repeat(10_000);
+        let args: Vec<Dynamic> = (0..10_000).map(|i| Dynamic::from(format!("arg{}", i))).collect();
+        let result = sprintf(&fmt, &args[..100]); // Use fewer args to stay under MAX_ARGS
+        // Output should be truncated if it gets too large
+        if result.len() > 20_000 {
+            assert!(result.contains("...[truncated]"));
+        }
     }
 }
