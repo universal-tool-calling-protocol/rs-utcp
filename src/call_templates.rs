@@ -14,6 +14,16 @@ pub static CALL_TEMPLATE_HANDLERS: Lazy<RwLock<HashMap<String, CallTemplateHandl
         let mut handlers: HashMap<String, CallTemplateHandler> = HashMap::new();
         handlers.insert("http".to_string(), http_call_template_handler);
         handlers.insert("cli".to_string(), cli_call_template_handler);
+        handlers.insert("websocket".to_string(), websocket_call_template_handler);
+        handlers.insert("grpc".to_string(), grpc_call_template_handler);
+        handlers.insert("graphql".to_string(), graphql_call_template_handler);
+        handlers.insert("tcp".to_string(), tcp_call_template_handler);
+        handlers.insert("udp".to_string(), udp_call_template_handler);
+        handlers.insert("sse".to_string(), sse_call_template_handler);
+        handlers.insert("mcp".to_string(), mcp_call_template_handler);
+        handlers.insert("webrtc".to_string(), webrtc_call_template_handler);
+        handlers.insert("http_stream".to_string(), http_stream_call_template_handler);
+        handlers.insert("text".to_string(), text_call_template_handler);
         RwLock::new(handlers)
     });
 
@@ -125,4 +135,214 @@ fn cli_call_template_handler(template: Value) -> Result<Value> {
     }
 
     Ok(Value::Object(obj))
+}
+
+fn websocket_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(url) = obj.remove("url") {
+        obj.insert("url".to_string(), url);
+    }
+    if let Some(protocol) = obj.remove("protocol") {
+        obj.insert("protocol".to_string(), protocol);
+    }
+    if let Some(keep_alive) = obj.remove("keep_alive") {
+        obj.insert("keep_alive".to_string(), keep_alive);
+    }
+    if let Some(headers) = obj.remove("headers") {
+        obj.insert("headers".to_string(), headers);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn grpc_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(host) = obj.remove("host") {
+        obj.insert("host".to_string(), host);
+    }
+    if let Some(port) = obj.remove("port") {
+        obj.insert("port".to_string(), port);
+    }
+    if let Some(use_ssl) = obj.remove("use_ssl") {
+        obj.insert("use_ssl".to_string(), use_ssl);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn graphql_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(url) = obj.remove("url") {
+        obj.insert("url".to_string(), url);
+    }
+    if let Some(op_type) = obj.remove("operation_type") {
+        obj.insert("operation_type".to_string(), op_type);
+    }
+    if let Some(op_name) = obj.remove("operation_name") {
+        obj.insert("operation_name".to_string(), op_name);
+    }
+    if let Some(headers) = obj.remove("headers") {
+        obj.insert("headers".to_string(), headers);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn tcp_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(host) = obj.remove("host") {
+        obj.insert("host".to_string(), host);
+    }
+    if let Some(port) = obj.remove("port") {
+        obj.insert("port".to_string(), port);
+    }
+    if let Some(timeout) = obj.remove("timeout_ms") {
+        obj.insert("timeout_ms".to_string(), timeout);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn udp_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(host) = obj.remove("host") {
+        obj.insert("host".to_string(), host);
+    }
+    if let Some(port) = obj.remove("port") {
+        obj.insert("port".to_string(), port);
+    }
+    if let Some(timeout) = obj.remove("timeout_ms") {
+        obj.insert("timeout_ms".to_string(), timeout);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn sse_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(url) = obj.remove("url") {
+        obj.insert("url".to_string(), url);
+    }
+    if let Some(headers) = obj.remove("headers") {
+        obj.insert("headers".to_string(), headers);
+    }
+    if let Some(body_field) = obj.remove("body_field") {
+        obj.insert("body_field".to_string(), body_field);
+    }
+    if let Some(header_fields) = obj.remove("header_fields") {
+        obj.insert("header_fields".to_string(), header_fields);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn mcp_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    // HTTP fields
+    if let Some(url) = obj.remove("url") {
+        obj.insert("url".to_string(), url);
+    }
+    if let Some(headers) = obj.remove("headers") {
+        obj.insert("headers".to_string(), headers);
+    }
+    // Stdio fields
+    if let Some(cmd) = obj.remove("command") {
+        obj.insert("command".to_string(), cmd);
+    }
+    if let Some(args) = obj.remove("args") {
+        obj.insert("args".to_string(), args);
+    }
+    if let Some(env) = obj.remove("env_vars") {
+        obj.insert("env_vars".to_string(), env);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn webrtc_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(sig) = obj.remove("signaling_server") {
+        obj.insert("signaling_server".to_string(), sig);
+    }
+    if let Some(ice) = obj.remove("ice_servers") {
+        obj.insert("ice_servers".to_string(), ice);
+    }
+    if let Some(label) = obj.remove("channel_label") {
+        obj.insert("channel_label".to_string(), label);
+    }
+    if let Some(ordered) = obj.remove("ordered") {
+        obj.insert("ordered".to_string(), ordered);
+    }
+    if let Some(life) = obj.remove("max_packet_life_time") {
+        obj.insert("max_packet_life_time".to_string(), life);
+    }
+    if let Some(retx) = obj.remove("max_retransmits") {
+        obj.insert("max_retransmits".to_string(), retx);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn http_stream_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(url) = obj.remove("url") {
+        obj.insert("url".to_string(), url);
+    }
+    if let Some(method) = obj.remove("http_method") {
+        obj.insert("http_method".to_string(), method);
+    }
+    if let Some(headers) = obj.remove("headers") {
+        obj.insert("headers".to_string(), headers);
+    }
+    Ok(Value::Object(obj))
+}
+
+fn text_call_template_handler(template: Value) -> Result<Value> {
+    let (_, mut obj) = normalize_common_template(template)?;
+    if let Some(path) = obj.remove("base_path") {
+        obj.insert("base_path".to_string(), path);
+    }
+    Ok(Value::Object(obj))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_websocket_template() {
+        let template = json!({
+            "call_template_type": "websocket",
+            "name": "ws-tool",
+            "url": "ws://localhost:8080",
+            "protocol": "json-rpc"
+        });
+        let result = call_template_to_provider(template).unwrap();
+        assert_eq!(result["provider_type"], "websocket");
+        assert_eq!(result["url"], "ws://localhost:8080");
+        assert_eq!(result["protocol"], "json-rpc");
+    }
+
+    #[test]
+    fn test_grpc_template() {
+        let template = json!({
+            "call_template_type": "grpc",
+            "name": "grpc-tool",
+            "host": "localhost",
+            "port": 50051,
+            "use_ssl": true
+        });
+        let result = call_template_to_provider(template).unwrap();
+        assert_eq!(result["provider_type"], "grpc");
+        assert_eq!(result["host"], "localhost");
+        assert_eq!(result["port"], 50051);
+        assert_eq!(result["use_ssl"], true);
+    }
+
+    #[test]
+    fn test_mcp_template() {
+        let template = json!({
+            "call_template_type": "mcp",
+            "name": "mcp-tool",
+            "command": "python",
+            "args": ["server.py"]
+        });
+        let result = call_template_to_provider(template).unwrap();
+        assert_eq!(result["provider_type"], "mcp");
+        assert_eq!(result["command"], "python");
+        assert_eq!(result["args"][0], "server.py");
+    }
 }
