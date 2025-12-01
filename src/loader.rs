@@ -180,6 +180,16 @@ fn parse_manual_tools_with_providers(
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow!("Manual missing tools array"))?;
 
+    // Extract allowed_communication_protocols from manual
+    let manual_allowed_protocols: Option<Vec<String>> = obj
+        .get("allowed_communication_protocols")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        });
+
     let mut providers = Vec::new();
     let mut tools_per_provider = Vec::new();
 
@@ -187,26 +197,61 @@ fn parse_manual_tools_with_providers(
         if let Some(provider_val) = tool_to_provider(tool_val)? {
             let mut provider_val = provider_val.clone();
             substitute_variables(&mut provider_val, config);
+
             // If missing provider_type, derive from call_template_type
-            let obj = provider_val
+            let provider_obj = provider_val
                 .as_object_mut()
                 .ok_or_else(|| anyhow!("Provider must be object"))?;
-            if obj
+
+            let provider_type_str = if provider_obj
                 .get("provider_type")
-                .or_else(|| obj.get("type"))
+                .or_else(|| provider_obj.get("type"))
                 .is_none()
             {
-                if let Some(ct) = obj.get("call_template_type").cloned() {
-                    obj.insert("provider_type".to_string(), ct.clone());
-                    obj.insert("type".to_string(), ct);
+                if let Some(ct) = provider_obj.get("call_template_type").cloned() {
+                    provider_obj.insert("provider_type".to_string(), ct.clone());
+                    provider_obj.insert("type".to_string(), ct.clone());
+                    ct.as_str().unwrap_or("http").to_string()
                 } else {
-                    obj.insert(
+                    provider_obj.insert(
                         "provider_type".to_string(),
                         Value::String("http".to_string()),
                     );
-                    obj.insert("type".to_string(), Value::String("http".to_string()));
+                    provider_obj.insert("type".to_string(), Value::String("http".to_string()));
+                    "http".to_string()
+                }
+            } else {
+                provider_obj
+                    .get("provider_type")
+                    .or_else(|| provider_obj.get("type"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("http")
+                    .to_string()
+            };
+
+            // Propagate manual's allowed_communication_protocols to provider if set
+            if let Some(ref allowed) = manual_allowed_protocols {
+                if !allowed.is_empty() {
+                    // Check if this tool's protocol is allowed
+                    if !allowed.contains(&provider_type_str) {
+                        // Log warning and skip this tool
+                        if let Some(tool_name) = tool_val.get("name").and_then(|v| v.as_str()) {
+                            eprintln!(
+                                "Warning: Tool '{}' uses communication protocol '{}' which is not in allowed protocols {:?} for manual. Tool will not be registered.",
+                                tool_name, provider_type_str, allowed
+                            );
+                        }
+                        continue; // Skip this tool
+                    }
+
+                    // Add allowed_communication_protocols to provider
+                    provider_obj.insert(
+                        "allowed_communication_protocols".to_string(),
+                        serde_json::to_value(allowed.clone())?,
+                    );
                 }
             }
+
             let provider = create_provider_from_value(provider_val, idx)?;
             let prov_name = provider.name();
             providers.push(provider);

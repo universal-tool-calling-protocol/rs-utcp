@@ -357,6 +357,7 @@ mod tests {
                 name: "grpc".to_string(),
                 provider_type: ProviderType::Grpc,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             host: addr.ip().to_string(),
             port: addr.port(),

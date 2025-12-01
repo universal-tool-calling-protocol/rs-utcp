@@ -81,6 +81,7 @@ impl WebRtcProvider {
                 name,
                 provider_type: ProviderType::Webrtc,
                 auth,
+                allowed_communication_protocols: None,
             },
             signaling_server,
             ice_servers: default_ice_servers(),

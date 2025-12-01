@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0]
+
+### Added
+- **Protocol Restrictions** - Fine-grained control over allowed communication protocols:
+  - Added `allowed_communication_protocols` field to `CallTemplate`, `ManualV1`, and `BaseProvider`
+  - Implemented secure-by-default behavior: tools default to only allowing their own protocol type
+  - Added validation in `call_tool` and `call_tool_stream` to enforce protocol restrictions
+  - Added filtering logic during manual loading to skip tools with disallowed protocols
+  - Comprehensive test suite for protocol restriction scenarios
+
+## [0.2.9]
+
+### Added
+- **Call Template Handlers** - Added handlers and registration for 10 new call template types:
+  - websocket, grpc, graphql, tcp, udp, sse, mcp, webrtc, http_stream, and text
+  - Expands provider support across streaming, network, and RPC protocols
+- **Unit Tests** - Added unit tests for websocket, grpc, and mcp to validate provider_type and field mapping
+
+### Changed
+- **Template Normalization** - Normalized key fields per template (e.g., url, headers, host/port, operation_type, timeout_ms, signaling_server)
+
 ## [0.2.8]
 
 ### Security

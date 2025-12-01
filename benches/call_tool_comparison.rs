@@ -1,22 +1,22 @@
+use async_trait::async_trait;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rs_utcp::{
     config::UtcpClientConfig,
-    plugins::codemode::{CodeModeUtcp, CodeModeArgs},
+    plugins::codemode::{CodeModeArgs, CodeModeUtcp},
+    providers::base::{BaseProvider, Provider, ProviderType},
     repository::in_memory::InMemoryToolRepository,
     tag::tag_search::TagSearchStrategy,
+    tools::{Tool, ToolInputOutputSchema},
     transports::{
-        CommunicationProtocol,
         registry::register_communication_protocol,
         stream::{boxed_vec_stream, StreamResult},
+        CommunicationProtocol,
     },
-    providers::base::{BaseProvider, Provider, ProviderType},
-    tools::{Tool, ToolInputOutputSchema},
     UtcpClient, UtcpClientInterface,
 };
-use std::{collections::HashMap, sync::Arc};
 use serde_json::{json, Value};
+use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
-use async_trait::async_trait;
 
 // --- Mock Protocol for Benchmarking ---
 
@@ -25,10 +25,7 @@ struct BenchmarkProtocol;
 
 #[async_trait]
 impl CommunicationProtocol for BenchmarkProtocol {
-    async fn register_tool_provider(
-        &self,
-        _prov: &dyn Provider,
-    ) -> anyhow::Result<Vec<Tool>> {
+    async fn register_tool_provider(&self, _prov: &dyn Provider) -> anyhow::Result<Vec<Tool>> {
         Ok(vec![
             Tool {
                 name: "echo".to_string(),
@@ -91,14 +88,11 @@ impl CommunicationProtocol for BenchmarkProtocol {
                 tags: vec![],
                 average_response_size: None,
                 provider: None,
-            }
+            },
         ])
     }
 
-    async fn deregister_tool_provider(
-        &self,
-        _prov: &dyn Provider,
-    ) -> anyhow::Result<()> {
+    async fn deregister_tool_provider(&self, _prov: &dyn Provider) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -119,9 +113,7 @@ impl CommunicationProtocol for BenchmarkProtocol {
         _prov: &dyn Provider,
     ) -> anyhow::Result<Box<dyn StreamResult>> {
         // Return a stream of 10 items
-        let items: Vec<Value> = (0..10)
-            .map(|i| json!({"chunk": i}))
-            .collect();
+        let items: Vec<Value> = (0..10).map(|i| json!({"chunk": i})).collect();
         Ok(boxed_vec_stream(items))
     }
 }
@@ -144,9 +136,12 @@ async fn create_bench_client() -> Arc<UtcpClient> {
         provider_type: ProviderType::HttpStream,
         auth: None,
     };
-    
-    client.register_tool_provider(Arc::new(provider)).await.unwrap();
-    
+
+    client
+        .register_tool_provider(Arc::new(provider))
+        .await
+        .unwrap();
+
     Arc::new(client)
 }
 
@@ -155,7 +150,7 @@ async fn create_bench_client() -> Arc<UtcpClient> {
 fn bench_call_tool_comparison(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("call_tool_comparison");
-    
+
     // Setup client once
     let client = rt.block_on(create_bench_client());
     let codemode = CodeModeUtcp::new(client.clone());
@@ -164,7 +159,10 @@ fn bench_call_tool_comparison(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             let mut args = HashMap::new();
             args.insert("msg".to_string(), json!("hello"));
-            client.call_tool(black_box("bench.echo"), black_box(args)).await.unwrap()
+            client
+                .call_tool(black_box("bench.echo"), black_box(args))
+                .await
+                .unwrap()
         });
     });
 
@@ -178,22 +176,25 @@ fn bench_call_tool_comparison(c: &mut Criterion) {
             codemode.execute(black_box(args)).await.unwrap()
         });
     });
-    
+
     group.finish();
 }
 
 fn bench_call_tool_stream_comparison(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("call_tool_stream_comparison");
-    
+
     let client = rt.block_on(create_bench_client());
     let codemode = CodeModeUtcp::new(client.clone());
 
     group.bench_function("native", |b| {
         b.to_async(&rt).iter(|| async {
             let args = HashMap::new();
-            let mut stream = client.call_tool_stream(black_box("bench.stream"), black_box(args)).await.unwrap();
-            
+            let mut stream = client
+                .call_tool_stream(black_box("bench.stream"), black_box(args))
+                .await
+                .unwrap();
+
             // Consume the stream
             let mut count = 0;
             while let Ok(Some(_)) = stream.next().await {
@@ -217,14 +218,14 @@ fn bench_call_tool_stream_comparison(c: &mut Criterion) {
             codemode.execute(black_box(args)).await.unwrap()
         });
     });
-    
+
     group.finish();
 }
 
 fn bench_call_many_tools_comparison(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("call_many_tools_comparison");
-    
+
     let client = rt.block_on(create_bench_client());
     let codemode = CodeModeUtcp::new(client.clone());
     let tool_count = 50;
@@ -234,18 +235,24 @@ fn bench_call_many_tools_comparison(c: &mut Criterion) {
             for i in 0..tool_count {
                 let mut args = HashMap::new();
                 args.insert("msg".to_string(), json!(format!("hello {}", i)));
-                client.call_tool(black_box("bench.echo"), black_box(args)).await.unwrap();
+                client
+                    .call_tool(black_box("bench.echo"), black_box(args))
+                    .await
+                    .unwrap();
             }
         });
     });
 
     group.bench_function("codemode", |b| {
-        let script = format!(r#"
+        let script = format!(
+            r#"
             for i in 0..{} {{
                 call_tool("bench.echo", #{{ "msg": "hello " + i }});
             }}
-        "#, tool_count);
-        
+        "#,
+            tool_count
+        );
+
         b.to_async(&rt).iter(|| async {
             let args = CodeModeArgs {
                 code: black_box(script.clone()),
@@ -254,7 +261,7 @@ fn bench_call_many_tools_comparison(c: &mut Criterion) {
             codemode.execute(black_box(args)).await.unwrap()
         });
     });
-    
+
     group.finish();
 }
 

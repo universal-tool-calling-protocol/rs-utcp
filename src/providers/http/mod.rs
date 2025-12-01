@@ -43,6 +43,7 @@ impl HttpProvider {
                 name,
                 provider_type: ProviderType::Http,
                 auth,
+                allowed_communication_protocols: None,
             },
             http_method,
             url,

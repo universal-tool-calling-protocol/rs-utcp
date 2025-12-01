@@ -15,6 +15,9 @@ pub mod tag;
 pub mod tools;
 pub mod transports;
 
+#[cfg(test)]
+mod allowed_protocols_tests;
+
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -411,6 +414,20 @@ impl UtcpClientInterface for UtcpClient {
         args: HashMap<String, serde_json::Value>,
     ) -> Result<serde_json::Value> {
         let resolved = self.resolve_tool(tool_name).await?;
+
+        // Validate protocol is allowed by the provider
+        let provider_allowed_protocols = resolved.provider.allowed_protocols();
+        let tool_protocol = resolved.provider.type_().as_key();
+
+        if !provider_allowed_protocols.contains(&tool_protocol.to_string()) {
+            return Err(anyhow!(
+                "Tool '{}' uses communication protocol '{}' which is not allowed by its provider. Allowed protocols: {:?}",
+                tool_name,
+                tool_protocol,
+                provider_allowed_protocols
+            ));
+        }
+
         resolved
             .protocol
             .call_tool(&resolved.call_name, args, resolved.provider.as_ref())
@@ -431,6 +448,20 @@ impl UtcpClientInterface for UtcpClient {
         args: HashMap<String, serde_json::Value>,
     ) -> Result<Box<dyn StreamResult>> {
         let resolved = self.resolve_tool(tool_name).await?;
+
+        // Validate protocol is allowed by the provider
+        let provider_allowed_protocols = resolved.provider.allowed_protocols();
+        let tool_protocol = resolved.provider.type_().as_key();
+
+        if !provider_allowed_protocols.contains(&tool_protocol.to_string()) {
+            return Err(anyhow!(
+                "Tool '{}' uses communication protocol '{}' which is not allowed by its provider. Allowed protocols: {:?}",
+                tool_name,
+                tool_protocol,
+                provider_allowed_protocols
+            ));
+        }
+
         resolved
             .protocol
             .call_tool_stream(&resolved.call_name, args, resolved.provider.as_ref())

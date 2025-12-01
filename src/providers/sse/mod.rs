@@ -40,6 +40,7 @@ impl SseProvider {
                 name,
                 provider_type: ProviderType::Sse,
                 auth,
+                allowed_communication_protocols: None,
             },
             url,
             headers: None,

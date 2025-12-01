@@ -37,12 +37,12 @@ impl McpStdioProcess {
         // Allow empty allowlist for flexibility (allows all commands), but validation still checks for dangerous chars.
         // TODO: Make allowlist configurable via McpProvider or global config.
         crate::security::validate_command(command, &[])?;
-        
+
         // Security: Validate arguments
         if let Some(args_vec) = args {
             crate::security::validate_command_args(args_vec)?;
         }
-        
+
         let mut cmd = Command::new(command);
 
         if let Some(args_vec) = args {
@@ -579,6 +579,7 @@ mod tests {
                 name: "invalid".to_string(),
                 provider_type: ProviderType::Mcp,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             url: None,
             headers: None,
@@ -675,6 +676,7 @@ mod tests {
                 name: "mcp".to_string(),
                 provider_type: ProviderType::Mcp,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             url: Some(format!("http://{}", addr)),
             headers: None,

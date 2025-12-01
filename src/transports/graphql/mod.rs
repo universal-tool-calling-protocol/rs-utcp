@@ -13,7 +13,10 @@ use crate::auth::AuthConfig;
 use crate::providers::base::Provider;
 use crate::providers::graphql::GraphqlProvider;
 use crate::tools::{Tool, ToolInputOutputSchema};
-use crate::transports::{stream::{boxed_channel_stream, StreamResult}, ClientTransport};
+use crate::transports::{
+    stream::{boxed_channel_stream, StreamResult},
+    ClientTransport,
+};
 
 /// Transport that maps GraphQL operations to UTCP tools.
 pub struct GraphQLTransport {
@@ -293,7 +296,7 @@ impl ClientTransport for GraphQLTransport {
             .unwrap_or(tool_name);
 
         let operation_type = Self::infer_operation(&gql_prov.operation_type, call_name);
-        
+
         // GraphQL subscriptions must be sent over WebSocket
         if operation_type != "subscription" {
             return Err(anyhow!(
@@ -343,7 +346,10 @@ impl ClientTransport for GraphQLTransport {
         if let Some(AuthConfig::ApiKey(api_key)) = &gql_prov.base.auth {
             if api_key.location.to_ascii_lowercase() == "query" {
                 let separator = if ws_url.contains('?') { "&" } else { "?" };
-                ws_url = format!("{}{}{}={}", ws_url, separator, api_key.var_name, api_key.api_key);
+                ws_url = format!(
+                    "{}{}{}={}",
+                    ws_url, separator, api_key.var_name, api_key.api_key
+                );
             }
         }
 
@@ -354,7 +360,10 @@ impl ClientTransport for GraphQLTransport {
             .header("Connection", "Upgrade")
             .header("Upgrade", "websocket")
             .header("Sec-WebSocket-Version", "13")
-            .header("Sec-WebSocket-Key", tokio_tungstenite::tungstenite::handshake::client::generate_key())
+            .header(
+                "Sec-WebSocket-Key",
+                tokio_tungstenite::tungstenite::handshake::client::generate_key(),
+            )
             .header("Sec-WebSocket-Protocol", "graphql-transport-ws")
             .body(())?;
 
@@ -382,19 +391,27 @@ impl ClientTransport for GraphQLTransport {
                         "query" => {
                             // Already handled above
                         }
-                        other => return Err(anyhow!("Unsupported API key location for WebSocket: {}", other)),
+                        other => {
+                            return Err(anyhow!(
+                                "Unsupported API key location for WebSocket: {}",
+                                other
+                            ))
+                        }
                     }
                 }
                 AuthConfig::Basic(basic) => {
                     use tokio_tungstenite::tungstenite::http::HeaderValue;
                     let credentials = format!("{}:{}", basic.username, basic.password);
-                    let encoded = base64::engine::general_purpose::STANDARD.encode(credentials.as_bytes());
+                    let encoded =
+                        base64::engine::general_purpose::STANDARD.encode(credentials.as_bytes());
                     let value = HeaderValue::from_str(&format!("Basic {}", encoded))
                         .map_err(|_| anyhow!("Invalid auth header"))?;
                     req.headers_mut().insert("authorization", value);
                 }
                 AuthConfig::OAuth2(_) => {
-                    return Err(anyhow!("OAuth2 is not supported for GraphQL WebSocket subscriptions"));
+                    return Err(anyhow!(
+                        "OAuth2 is not supported for GraphQL WebSocket subscriptions"
+                    ));
                 }
             }
         }
@@ -405,8 +422,8 @@ impl ClientTransport for GraphQLTransport {
             for (k, v) in headers {
                 let name = HeaderName::from_bytes(k.as_bytes())
                     .map_err(|_| anyhow!("Invalid header name: {}", k))?;
-                let value = HeaderValue::from_str(v)
-                    .map_err(|_| anyhow!("Invalid header value: {}", v))?;
+                let value =
+                    HeaderValue::from_str(v).map_err(|_| anyhow!("Invalid header value: {}", v))?;
                 req.headers_mut().insert(name, value);
             }
         }
@@ -482,7 +499,10 @@ impl ClientTransport for GraphQLTransport {
                                     // Check for errors in payload
                                     if let Some(errors) = payload.get("errors") {
                                         let _ = tx
-                                            .send(Err(anyhow!("GraphQL subscription error: {}", errors)))
+                                            .send(Err(anyhow!(
+                                                "GraphQL subscription error: {}",
+                                                errors
+                                            )))
                                             .await;
                                         break;
                                     }
@@ -510,9 +530,7 @@ impl ClientTransport for GraphQLTransport {
                     Ok(Message::Close(_)) => break,
                     Ok(_) => {} // Ignore binary, ping, pong
                     Err(err) => {
-                        let _ = tx
-                            .send(Err(anyhow!("WebSocket error: {}", err)))
-                            .await;
+                        let _ = tx.send(Err(anyhow!("WebSocket error: {}", err))).await;
                         break;
                     }
                 }
@@ -630,6 +648,7 @@ mod tests {
                 name: "gql".to_string(),
                 provider_type: crate::providers::base::ProviderType::Graphql,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             url: format!("http://{}", addr),
             operation_type: "query".to_string(),
@@ -696,6 +715,7 @@ mod tests {
                 name: "gql".to_string(),
                 provider_type: crate::providers::base::ProviderType::Graphql,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             url: format!("http://{}/graphql", addr),
             operation_type: "query".to_string(),
@@ -734,7 +754,11 @@ mod tests {
                         let init: Value = serde_json::from_str(&text).unwrap();
                         if init.get("type").and_then(|v| v.as_str()) == Some("connection_init") {
                             // Send connection_ack
-                            let _ = ws.send(Message::Text(json!({ "type": "connection_ack" }).to_string())).await;
+                            let _ = ws
+                                .send(Message::Text(
+                                    json!({ "type": "connection_ack" }).to_string(),
+                                ))
+                                .await;
 
                             // Receive subscription message
                             if let Some(Ok(Message::Text(text))) = ws.next().await {
@@ -742,32 +766,37 @@ mod tests {
                                 if sub.get("type").and_then(|v| v.as_str()) == Some("subscribe") {
                                     // Send multiple streaming events
                                     for i in 1..=3 {
-                                        let _ = ws.send(Message::Text(
-                                            json!({
-                                                "id": "1",
-                                                "type": "next",
-                                                "payload": {
-                                                    "data": {
-                                                        "messageAdded": {
-                                                            "id": i,
-                                                            "content": format!("Message {}", i)
+                                        let _ = ws
+                                            .send(Message::Text(
+                                                json!({
+                                                    "id": "1",
+                                                    "type": "next",
+                                                    "payload": {
+                                                        "data": {
+                                                            "messageAdded": {
+                                                                "id": i,
+                                                                "content": format!("Message {}", i)
+                                                            }
                                                         }
                                                     }
-                                                }
-                                            })
-                                            .to_string(),
-                                        )).await;
-                                        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                                })
+                                                .to_string(),
+                                            ))
+                                            .await;
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(10))
+                                            .await;
                                     }
 
                                     // Send complete message
-                                    let _ = ws.send(Message::Text(
-                                        json!({
-                                            "id": "1",
-                                            "type": "complete"
-                                        })
-                                        .to_string(),
-                                    )).await;
+                                    let _ = ws
+                                        .send(Message::Text(
+                                            json!({
+                                                "id": "1",
+                                                "type": "complete"
+                                            })
+                                            .to_string(),
+                                        ))
+                                        .await;
                                 }
                             }
                         }
@@ -784,6 +813,7 @@ mod tests {
                 name: "gql".to_string(),
                 provider_type: crate::providers::base::ProviderType::Graphql,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             url: format!("http://{}", addr),
             operation_type: "subscription".to_string(),
@@ -810,11 +840,9 @@ mod tests {
         for (i, result) in results.iter().enumerate() {
             let expected_id = i + 1;
             assert_eq!(
-                result["messageAdded"]["id"],
-                expected_id,
+                result["messageAdded"]["id"], expected_id,
                 "Expected message {} to have id {}",
-                i,
-                expected_id
+                i, expected_id
             );
             assert_eq!(
                 result["messageAdded"]["content"],

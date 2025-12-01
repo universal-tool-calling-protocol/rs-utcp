@@ -417,6 +417,36 @@ register_communication_protocol("myproto", Arc::new(MyProtocol::new())); // impl
 }
 ```
 
+### Protocol Restrictions
+
+You can restrict which communication protocols are allowed for a manual or provider using the `allowed_communication_protocols` field. This provides a secure-by-default mechanism where tools can only use their own protocol unless explicitly allowed.
+
+```json
+{
+  "manual_version": "1.0.0",
+  "info": { "title": "Restricted Manual", "version": "1.0.0" },
+  "allowed_communication_protocols": ["http", "cli"],
+  "tools": [
+    {
+      "name": "http_tool",
+      "tool_call_template": {
+        "call_template_type": "http",
+        "url": "http://example.com"
+      }
+    },
+    {
+      "name": "cli_tool",
+      "tool_call_template": {
+        "call_template_type": "cli",
+        "command": "echo"
+      }
+    }
+  ]
+}
+```
+
+If `allowed_communication_protocols` is not specified, it defaults to only allowing the tool's own protocol type. Tools attempting to use disallowed protocols will be filtered out during registration, and calls will fail validation.
+
 ### Custom Search Strategy
 
 ```rust

@@ -36,6 +36,7 @@ impl UdpProvider {
                 name,
                 provider_type: ProviderType::Udp,
                 auth,
+                allowed_communication_protocols: None,
             },
             host,
             port,

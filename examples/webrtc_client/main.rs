@@ -17,13 +17,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 
 // HTTP server for signaling
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::post,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SignalingOffer {
@@ -96,10 +90,7 @@ async fn handle_offer(
     }
 }
 
-async fn create_peer_connection_and_answer(
-    state: &AppState,
-    offer_sdp: &str,
-) -> Result<String> {
+async fn create_peer_connection_and_answer(state: &AppState, offer_sdp: &str) -> Result<String> {
     // Configure WebRTC
     let config = RTCConfiguration {
         ice_servers: vec![RTCIceServer {
@@ -118,7 +109,7 @@ async fn create_peer_connection_and_answer(
     peer_connection.on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
         println!("📨 Data channel opened: {}", data_channel.label());
         let dc = data_channel.clone();
-        
+
         Box::pin(async move {
             // Handle incoming messages
             dc.on_message(Box::new(move |msg: DataChannelMessage| {
@@ -138,7 +129,9 @@ async fn create_peer_connection_and_answer(
 
     // Create answer
     let answer = peer_connection.create_answer(None).await?;
-    peer_connection.set_local_description(answer.clone()).await?;
+    peer_connection
+        .set_local_description(answer.clone())
+        .await?;
 
     // Store peer connection
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -154,7 +147,7 @@ async fn create_peer_connection_and_answer(
 async fn handle_tool_call(channel: &Arc<RTCDataChannel>, data: &[u8]) -> Result<()> {
     // Parse request
     let request: Value = serde_json::from_slice(data)?;
-    
+
     println!("🔧 Received tool call: {}", request);
 
     let method = request
@@ -259,17 +252,11 @@ async fn handle_call_tool(request: &Value) -> Result<Value> {
 
     let result = match tool_name {
         "echo" => {
-            let text = args
-                .get("text")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
             json!({ "result": text })
         }
         "uppercase" => {
-            let text = args
-                .get("text")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
             json!({ "result": text.to_uppercase() })
         }
         _ => json!({ "error": format!("Unknown tool: {}", tool_name) }),
@@ -298,10 +285,7 @@ async fn handle_call_tool_stream(channel: &Arc<RTCDataChannel>, request: &Value)
 
     match tool_name {
         "stream_numbers" => {
-            let count = args
-                .get("count")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(5);
+            let count = args.get("count").and_then(|v| v.as_i64()).unwrap_or(5);
 
             for i in 1..=count {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;

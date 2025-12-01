@@ -36,6 +36,7 @@ impl GrpcProvider {
                 name,
                 provider_type: ProviderType::Grpc,
                 auth,
+                allowed_communication_protocols: None,
             },
             host,
             port,

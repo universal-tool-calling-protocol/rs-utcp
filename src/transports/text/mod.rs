@@ -38,7 +38,9 @@ impl TextTransport {
 
     async fn load_tools_from_file(&self, path: &PathBuf) -> Result<Vec<Tool>> {
         // Validate path is safe
-        let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid path encoding"))?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid path encoding"))?;
         let base_str = self.base_path.as_ref().and_then(|p| p.to_str());
         validate_file_path(path_str, base_str)?;
 
@@ -158,7 +160,9 @@ impl ClientTransport for TextTransport {
             .ok_or_else(|| anyhow!("Tool script not found for '{}'", tool_name))?;
 
         // Validate script path is within base path
-        let script_path_str = script_path.to_str().ok_or_else(|| anyhow!("Invalid path encoding"))?;
+        let script_path_str = script_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid path encoding"))?;
         let base_path_str = base_path.to_str();
         validate_file_path(script_path_str, base_path_str)?;
 

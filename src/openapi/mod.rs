@@ -377,6 +377,7 @@ impl OpenApiConverter {
                 name: self.provider_name.clone(),
                 provider_type: ProviderType::Http,
                 auth,
+                allowed_communication_protocols: None,
             },
             http_method: method.to_ascii_uppercase(),
             url: join_url(base_url, path),

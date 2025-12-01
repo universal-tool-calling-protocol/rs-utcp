@@ -74,6 +74,13 @@ pub trait Provider: Send + Sync + std::fmt::Debug + std::any::Any {
 
     /// Downcast helper for transports that need the concrete provider type.
     fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Returns the list of allowed communication protocols for this provider.
+    /// If not configured (None or empty), defaults to only the provider's own protocol type.
+    fn allowed_protocols(&self) -> Vec<String> {
+        // Default implementation - providers can override this
+        vec![self.type_().as_key().to_string()]
+    }
 }
 
 /// Minimal provider shape shared by most transport-specific provider structs.
@@ -83,6 +90,13 @@ pub struct BaseProvider {
     pub provider_type: ProviderType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth: Option<AuthConfig>,
+    /// List of allowed communication protocol types (e.g., ["http", "cli"]).
+    /// If undefined, null, or empty, defaults to only allowing this provider's own protocol type.
+    /// This provides secure-by-default behavior where a provider can only register/call tools
+    /// that use its own protocol unless explicitly configured otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub allowed_communication_protocols: Option<Vec<String>>,
 }
 
 impl Provider for BaseProvider {
@@ -94,5 +108,14 @@ impl Provider for BaseProvider {
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+    fn allowed_protocols(&self) -> Vec<String> {
+        if let Some(ref protocols) = self.allowed_communication_protocols {
+            if !protocols.is_empty() {
+                return protocols.clone();
+            }
+        }
+        // Default to only allowing this provider's own protocol
+        vec![self.provider_type.as_key().to_string()]
     }
 }
