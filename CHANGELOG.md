@@ -21,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `search_tools()`: Query length limit (1,000 chars), result limit (500 max)
     - `sprintf()`: Format string limits, argument truncation, DoS prevention
   - **Dangerous Pattern Detection**: Blocked `eval()`, `import`, `fn`, infinite loops
-  - **SECURITY.md**: Comprehensive security documentation with threat model and best practices
 
 ### Changed
 - Codemode timeout parameter is now strictly enforced (was previously ignored)
