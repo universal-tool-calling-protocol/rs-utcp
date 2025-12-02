@@ -96,18 +96,54 @@ async fn main() -> anyhow::Result<()> {
 
 ```json
 {
-  "manual_call_templates": [
+  "manual_version": "1.0.0",
+  "utcp_version": "0.3.0",
+  "allowed_communication_protocols": ["http", "mcp"],
+  "info": {
+    "title": "Example UTCP Manual",
+    "version": "1.0.0",
+    "description": "Manual v1.0 with tools"
+  },
+  "tools": [
     {
-      "call_template_type": "http",
-      "name": "weather_api",
-      "url": "https://api.weather.example.com/tools",
-      "http_method": "GET"
+      "name": "get_forecast",
+      "description": "Get current weather for a city",
+      "inputs": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string", "description": "City name" },
+          "units": { "type": "string", "enum": ["metric", "imperial"] }
+        },
+        "required": ["city"]
+      },
+      "outputs": { "type": "object" },
+      "tool_call_template": {
+        "call_template_type": "http",
+        "name": "weather_api",
+        "url": "https://api.weather.example.com/tools",
+        "http_method": "GET",
+        "headers": { "Accept": "application/json" }
+      },
+      "tags": ["weather", "demo"]
     },
     {
-      "call_template_type": "mcp",
-      "name": "file_tools",
-      "command": "python3",
-      "args": ["mcp_server.py"]
+      "name": "read_file",
+      "description": "Read a text file via MCP stdio",
+      "inputs": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "File path" }
+        },
+        "required": ["path"]
+      },
+      "outputs": { "type": "object" },
+      "tool_call_template": {
+        "call_template_type": "mcp",
+        "name": "file_tools",
+        "command": "python3",
+        "args": ["mcp_server.py"]
+      },
+      "tags": ["mcp", "filesystem"]
     }
   ],
   "load_variables_from": [
