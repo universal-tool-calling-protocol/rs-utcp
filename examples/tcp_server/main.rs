@@ -14,11 +14,25 @@ async fn main() -> anyhow::Result<()> {
     println!("Started TCP demo at {addr}");
 
     let client = common::client_from_providers(serde_json::json!({
-        "providers": [{
-            "provider_type": "tcp",
-            "name": "tcp_demo",
-            "host": addr.ip().to_string(),
-            "port": addr.port()
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["tcp"],
+        "info": {
+            "title": "TCP Demo",
+            "version": "1.0.0",
+            "description": "TCP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "TCP Echo",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "tcp",
+                "name": "tcp_demo",
+                "host": addr.ip().to_string(),
+                "port": addr.port()
+            }
         }]
     }))
     .await?;

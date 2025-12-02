@@ -15,10 +15,24 @@ async fn main() -> anyhow::Result<()> {
     println!("Started HTTP stream demo at http://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "http_stream",
-            "name": "http_stream_demo",
-            "url": format!("http://{addr}/tools")
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http_stream"],
+        "info": {
+            "title": "HTTP Stream Demo",
+            "version": "1.0.0",
+            "description": "HTTP Stream Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "Stream back JSON chunks",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http_stream",
+                "name": "http_stream_demo",
+                "url": format!("http://{addr}/tools")
+            }
         }]
     }))
     .await?;

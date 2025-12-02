@@ -13,11 +13,25 @@ async fn main() -> anyhow::Result<()> {
     println!("Started UDP demo at {addr}");
 
     let client = common::client_from_providers(serde_json::json!({
-        "providers": [{
-            "provider_type": "udp",
-            "name": "udp_demo",
-            "host": addr.ip().to_string(),
-            "port": addr.port()
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["udp"],
+        "info": {
+            "title": "UDP Demo",
+            "version": "1.0.0",
+            "description": "UDP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "UDP Echo",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "udp",
+                "name": "udp_demo",
+                "host": addr.ip().to_string(),
+                "port": addr.port()
+            }
         }]
     }))
     .await?;

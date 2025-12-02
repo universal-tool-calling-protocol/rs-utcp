@@ -14,13 +14,27 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_demo_server().await?;
     println!("Started demo HTTP server at http://{addr}/tools");
 
-    // Build UTCP client from a provider config file
+    // Build UTCP client from a manual with tools
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "http",
-            "name": "demo",
-            "url": format!("http://{addr}/tools"),
-            "http_method": "POST"
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http"],
+        "info": {
+            "title": "HTTP Demo",
+            "version": "1.0.0",
+            "description": "HTTP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "HTTP Echo",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "demo",
+                "url": format!("http://{addr}/tools"),
+                "http_method": "POST"
+            }
         }]
     }))
     .await?;

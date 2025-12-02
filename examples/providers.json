@@ -1,31 +1,107 @@
 {
-    "manual_call_templates": [
+    "manual_version": "1.0.0",
+    "utcp_version": "0.3.0",
+    "info": {
+        "title": "Example UTCP Tools Manual",
+        "version": "1.0.0",
+        "description": "Demonstration of v1.0 manual format with tools"
+    },
+    "allowed_communication_protocols": [
+        "http",
+        "cli"
+    ],
+    "tools": [
         {
-            "call_template_type": "http",
-            "name": "weather_api",
-            "url": "https://api.weather.example.com/tools",
-            "http_method": "GET",
-            "headers": {
-                "Accept": "application/json"
-            }
+            "name": "get_weather",
+            "description": "Get current weather for a city",
+            "inputs": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "City name"
+                    },
+                    "units": {
+                        "type": "string",
+                        "enum": [
+                            "metric",
+                            "imperial"
+                        ],
+                        "description": "Temperature units"
+                    }
+                },
+                "required": [
+                    "city"
+                ]
+            },
+            "outputs": {
+                "type": "object"
+            },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "weather_api",
+                "url": "https://api.weather.example.com/tools",
+                "http_method": "GET",
+                "headers": {
+                    "Accept": "application/json"
+                }
+            },
+            "tags": [
+                "weather",
+                "demo"
+            ]
         },
         {
-            "call_template_type": "cli",
-            "name": "git_tools",
-            "command": "git",
-            "working_dir": "/path/to/repo"
+            "name": "git_status",
+            "description": "Get git repository status",
+            "inputs": {
+                "type": "object"
+            },
+            "outputs": {
+                "type": "object"
+            },
+            "tool_call_template": {
+                "call_template_type": "cli",
+                "name": "git_tools",
+                "command": "git",
+                "working_dir": "/path/to/repo"
+            },
+            "tags": [
+                "git",
+                "version-control"
+            ]
         },
         {
-            "call_template_type": "http",
-            "name": "api_with_auth",
-            "url": "https://api.example.com/utcp",
-            "http_method": "GET",
-            "auth": {
-                "auth_type": "api_key",
-                "api_key": "${API_KEY}",
-                "var_name": "X-API-Key",
-                "location": "header"
-            }
+            "name": "api_call",
+            "description": "Make authenticated API call",
+            "inputs": {
+                "type": "object",
+                "properties": {
+                    "endpoint": {
+                        "type": "string",
+                        "description": "API endpoint path"
+                    }
+                }
+            },
+            "outputs": {
+                "type": "object"
+            },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "api_with_auth",
+                "url": "https://api.example.com/utcp",
+                "http_method": "GET",
+                "auth": {
+                    "auth_type": "api_key",
+                    "api_key": "${API_KEY}",
+                    "var_name": "X-API-Key",
+                    "location": "header"
+                }
+            },
+            "tags": [
+                "api",
+                "authenticated"
+            ]
         }
     ],
     "load_variables_from": [

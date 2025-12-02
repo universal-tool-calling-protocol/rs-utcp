@@ -15,10 +15,24 @@ async fn main() -> anyhow::Result<()> {
     println!("Started SSE demo at http://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "sse",
-            "name": "sse_demo",
-            "url": format!("http://{addr}/tools")
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["sse"],
+        "info": {
+            "title": "SSE Demo",
+            "version": "1.0.0",
+            "description": "SSE Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "Stream events",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "sse",
+                "name": "sse_demo",
+                "url": format!("http://{addr}/tools")
+            }
         }]
     }))
     .await?;

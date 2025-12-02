@@ -73,11 +73,25 @@ async fn demo_http() -> Result<()> {
 
     println!("  ▶️ HTTP -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "http",
-            "name": "http_demo",
-            "url": url,
-            "http_method": "POST"
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http"],
+        "info": {
+            "title": "HTTP Demo",
+            "version": "1.0.0",
+            "description": "HTTP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "HTTP echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "http_demo",
+                "url": url,
+                "http_method": "POST"
+            }
         }]
     }))
     .await?;
@@ -96,10 +110,24 @@ async fn demo_cli() -> Result<()> {
     };
     println!("  ▶️ CLI -> {cmd}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "cli",
-            "name": "cli_demo",
-            "command": cmd
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["cli"],
+        "info": {
+            "title": "CLI Demo",
+            "version": "1.0.0",
+            "description": "CLI Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "CLI echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "cli",
+                "name": "cli_demo",
+                "command": cmd
+            }
         }]
     }))
     .await?;
@@ -118,10 +146,24 @@ async fn demo_websocket() -> Result<()> {
     };
     println!("  ▶️ WebSocket -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "websocket",
-            "name": "ws_demo",
-            "url": url
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["websocket"],
+        "info": {
+            "title": "WebSocket Demo",
+            "version": "1.0.0",
+            "description": "WebSocket Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "WebSocket echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "websocket",
+                "name": "ws_demo",
+                "url": url
+            }
         }]
     }))
     .await?;
@@ -140,10 +182,24 @@ async fn demo_graphql() -> Result<()> {
     };
     println!("  ▶️ GraphQL -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "graphql",
-            "name": "graphql_demo",
-            "url": url
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["graphql"],
+        "info": {
+            "title": "GraphQL Demo",
+            "version": "1.0.0",
+            "description": "GraphQL Demo Manual"
+        },
+        "tools": [{
+            "name": "hello",
+            "description": "GraphQL hello tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "graphql",
+                "name": "graphql_demo",
+                "url": url
+            }
         }]
     }))
     .await?;
@@ -163,11 +219,25 @@ async fn demo_grpc() -> Result<()> {
     let port: u16 = port.parse().unwrap_or(50051);
     println!("  ▶️ gRPC -> {host}:{port}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "grpc",
-            "name": "grpc_demo",
-            "host": host,
-            "port": port
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["grpc"],
+        "info": {
+            "title": "gRPC Demo",
+            "version": "1.0.0",
+            "description": "gRPC Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "gRPC echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "grpc",
+                "name": "grpc_demo",
+                "host": host,
+                "port": port
+            }
         }]
     }))
     .await?;
@@ -187,11 +257,25 @@ async fn demo_tcp() -> Result<()> {
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ TCP -> {addr}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "tcp",
-            "name": "tcp_demo",
-            "host": host,
-            "port": port
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["tcp"],
+        "info": {
+            "title": "TCP Demo",
+            "version": "1.0.0",
+            "description": "TCP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "TCP echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "tcp",
+                "name": "tcp_demo",
+                "host": host,
+                "port": port
+            }
         }]
     }))
     .await?;
@@ -211,11 +295,25 @@ async fn demo_udp() -> Result<()> {
     let (host, port) = split_host_port(&addr)?;
     println!("  ▶️ UDP -> {addr}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "udp",
-            "name": "udp_demo",
-            "host": host,
-            "port": port
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["udp"],
+        "info": {
+            "title": "UDP Demo",
+            "version": "1.0.0",
+            "description": "UDP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "UDP echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "udp",
+                "name": "udp_demo",
+                "host": host,
+                "port": port
+            }
         }]
     }))
     .await?;
@@ -234,10 +332,24 @@ async fn demo_sse() -> Result<()> {
     };
     println!("  ▶️ SSE -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "sse",
-            "name": "sse_demo",
-            "url": url
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["sse"],
+        "info": {
+            "title": "SSE Demo",
+            "version": "1.0.0",
+            "description": "SSE Demo Manual"
+        },
+        "tools": [{
+            "name": "stream",
+            "description": "SSE stream tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "sse",
+                "name": "sse_demo",
+                "url": url
+            }
         }]
     }))
     .await?;
@@ -258,10 +370,24 @@ async fn demo_http_stream() -> Result<()> {
     };
     println!("  ▶️ HTTP Stream -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "http_stream",
-            "name": "http_stream_demo",
-            "url": url
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http_stream"],
+        "info": {
+            "title": "HTTP Stream Demo",
+            "version": "1.0.0",
+            "description": "HTTP Stream Demo Manual"
+        },
+        "tools": [{
+            "name": "stream",
+            "description": "HTTP stream tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http_stream",
+                "name": "http_stream_demo",
+                "url": url
+            }
         }]
     }))
     .await?;
@@ -284,10 +410,24 @@ async fn demo_mcp() -> Result<()> {
     };
     println!("  ▶️ MCP -> {url}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "mcp",
-            "name": "mcp_demo",
-            "url": url
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["mcp"],
+        "info": {
+            "title": "MCP Demo",
+            "version": "1.0.0",
+            "description": "MCP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "MCP echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "mcp",
+                "name": "mcp_demo",
+                "url": url
+            }
         }]
     }))
     .await?;
@@ -311,10 +451,24 @@ async fn demo_text() -> Result<()> {
     let base_path = PathBuf::from(path);
     println!("  ▶️ Text -> {}", base_path.display());
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "text",
-            "name": "text_demo",
-            "base_path": base_path
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["text"],
+        "info": {
+            "title": "Text Demo",
+            "version": "1.0.0",
+            "description": "Text Demo Manual"
+        },
+        "tools": [{
+            "name": "hello",
+            "description": "Text hello tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "text",
+                "name": "text_demo",
+                "base_path": base_path
+            }
         }]
     }))
     .await?;
@@ -335,10 +489,24 @@ async fn demo_webrtc() -> Result<()> {
     };
     println!("  ▶️ WebRTC -> {sig}");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "webrtc",
-            "name": "webrtc_demo",
-            "signaling_server": sig
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["webrtc"],
+        "info": {
+            "title": "WebRTC Demo",
+            "version": "1.0.0",
+            "description": "WebRTC Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "WebRTC echo tool",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "webrtc",
+                "name": "webrtc_demo",
+                "signaling_server": sig
+            }
         }]
     }))
     .await?;

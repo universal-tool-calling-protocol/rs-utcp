@@ -18,13 +18,27 @@ async fn main() -> anyhow::Result<()> {
     // Uncomment this if you have a real MCP server installed
     /*
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "mcp",
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["mcp"],
+        "info": {
+            "title": "MCP Stdio Demo (Node)",
+            "version": "1.0.0",
+            "description": "MCP Stdio Demo Manual (Node)"
+        },
+        "tools": [{
             "name": "filesystem",
-            "command": "node",
-            "args": ["/path/to/mcp-server/index.js"],
-            "env_vars": {
-                "MCP_DEBUG": "1"
+            "description": "Filesystem tools from MCP server",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "mcp",
+                "name": "filesystem",
+                "command": "node",
+                "args": ["/path/to/mcp-server/index.js"],
+                "env_vars": {
+                    "MCP_DEBUG": "1"
+                }
             }
         }]
     }))
@@ -35,12 +49,40 @@ async fn main() -> anyhow::Result<()> {
     // First, run: python examples/mcp_stdio_server.py
     println!("📡 Creating UTCP client with MCP stdio provider");
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "mcp",
-            "name": "calculator",
-            "command": "python3",
-            "args": ["examples/mcp_stdio_server.py"]
-        }]
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["mcp"],
+        "info": {
+            "title": "MCP Stdio Demo",
+            "version": "1.0.0",
+            "description": "MCP Stdio Demo Manual"
+        },
+        "tools": [
+            {
+                "name": "add",
+                "description": "Add two numbers",
+                "inputs": { "type": "object" },
+                "outputs": { "type": "object" },
+                "tool_call_template": {
+                    "call_template_type": "mcp",
+                    "name": "calculator",
+                    "command": "python3",
+                    "args": ["examples/mcp_stdio_server.py"]
+                }
+            },
+            {
+                "name": "multiply",
+                "description": "Multiply two numbers",
+                "inputs": { "type": "object" },
+                "outputs": { "type": "object" },
+                "tool_call_template": {
+                    "call_template_type": "mcp",
+                    "name": "calculator",
+                    "command": "python3",
+                    "args": ["examples/mcp_stdio_server.py"]
+                }
+            }
+        ]
     }))
     .await?;
 
