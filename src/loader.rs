@@ -213,10 +213,15 @@ fn parse_manual_tools_with_providers(
                     provider_obj.insert("type".to_string(), ct.clone());
                     ct.as_str().unwrap_or("http").to_string()
                 } else {
-                    provider_obj.insert(
-                        "provider_type".to_string(),
-                        Value::String("http".to_string()),
-                    );
+                  if provider_obj
+                        .get("allowed_communication_protocols")
+                        .is_none()
+                    {
+                        provider_obj.insert(
+                            "allowed_communication_protocols".to_string(),
+                            serde_json::to_value("http".to_string())?,
+                        );
+                    }
                     provider_obj.insert("type".to_string(), Value::String("http".to_string()));
                     "http".to_string()
                 }
