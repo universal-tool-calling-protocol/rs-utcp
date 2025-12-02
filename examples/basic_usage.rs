@@ -19,11 +19,24 @@ async fn main() -> anyhow::Result<()> {
     // Load providers via create() factory method using a temp JSON file.
     // v1.0: uses manual_call_templates instead of providers
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "http",
-            "name": "weather_api",
-            "url": format!("http://{addr}/tools"),
-            "http_method": "POST"
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "info": {
+            "title": "Basic Usage Demo",
+            "version": "1.0.0",
+            "description": "Basic Usage Demo Manual"
+        },
+        "tools": [{
+            "name": "get_current_weather",
+            "description": "Return a mock weather payload",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "weather_api",
+                "url": format!("http://{addr}/tools"),
+                "http_method": "POST"
+            }
         }]
     }))
     .await?;
