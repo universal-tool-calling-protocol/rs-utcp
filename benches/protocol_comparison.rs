@@ -56,7 +56,7 @@ fn bench_cli_tool_call(c: &mut Criterion) {
 
             let _ = client
                 .call_tool(black_box("echo_provider.echo"), black_box(args))
-                .await;
+                .await.expect("call_tool failed");
         });
     });
 }

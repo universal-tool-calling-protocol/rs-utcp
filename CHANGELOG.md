@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Call Template Handlers** - Added handlers and registration for 10 new call template types:
   - websocket, grpc, graphql, tcp, udp, sse, mcp, webrtc, http_stream, and text
   - Expands provider support across streaming, network, and RPC protocols
-- **Unit Tests** - Added unit tests for websocket, grpc, and mcp to validate provider_type and field mapping
+- **Unit Tests** - Added unit tests for websocket, grpc, and mcp to validate call_template_type and field mapping
 
 ### Changed
 - **Template Normalization** - Normalized key fields per template (e.g., url, headers, host/port, operation_type, timeout_ms, signaling_server)
