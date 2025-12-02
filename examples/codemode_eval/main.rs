@@ -21,7 +21,6 @@ async fn main() -> anyhow::Result<()> {
             "url": echo_url,
             "http_method": "POST",
             "allowed_communication_protocols": ["http"]
-
         }]
     }))
     .await?;
