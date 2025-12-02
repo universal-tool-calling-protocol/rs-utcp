@@ -58,8 +58,6 @@ async fn main() -> anyhow::Result<()> {
             "host": "127.0.0.1",
             "port": addr.port(),
             "allowed_communication_protocols": ["grpc"]
-
-            
         }]
     }))
     .await?;

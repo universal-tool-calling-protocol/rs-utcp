@@ -25,7 +25,6 @@ async fn main() -> anyhow::Result<()> {
             "name": "cli_demo",
             "command_name": command_name,
             "allowed_communication_protocols": ["cli"]
-
         }]
     }))
     .await?;

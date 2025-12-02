@@ -18,7 +18,6 @@ async fn main() -> anyhow::Result<()> {
             "name": "mcp_demo",
             "url": format!("http://{addr}"),
             "allowed_communication_protocols": ["mcp"]
-
         }]
     }))
     .await?;

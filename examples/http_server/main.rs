@@ -22,7 +22,6 @@ async fn main() -> anyhow::Result<()> {
             "url": format!("http://{addr}/tools"),
             "http_method": "POST",
             "allowed_communication_protocols": ["http"]
-
         }]
     }))
     .await?;

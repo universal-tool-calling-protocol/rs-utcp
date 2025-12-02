@@ -19,7 +19,6 @@ async fn main() -> anyhow::Result<()> {
             "name": "graphql_demo",
             "url": format!("http://{addr}/graphql"),
             "allowed_communication_protocols": ["graphql"]
-
         }]
     }))
     .await?;
