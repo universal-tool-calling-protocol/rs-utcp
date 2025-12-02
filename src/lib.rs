@@ -168,6 +168,23 @@ impl UtcpClient {
         }
     }
 
+    /// Validates that the protocol is allowed by the provider.
+    fn validate_allowed_protocol(resolved: &ResolvedTool, tool_name: &str) -> Result<()> {
+        let provider_allowed_protocols = resolved.provider.allowed_protocols();
+        let tool_protocol = resolved.provider.type_().as_key();
+
+        if !provider_allowed_protocols.contains(&tool_protocol.to_string()) {
+            return Err(anyhow!(
+                "Tool '{}' uses communication protocol '{}' which is not allowed by its provider. Allowed protocols: {:?}",
+                tool_name,
+                tool_protocol,
+                provider_allowed_protocols
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Resolves a tool name to a `ResolvedTool` containing the provider and protocol.
     /// Handles both fully qualified names (provider.tool) and bare names.
     async fn resolve_tool(&self, tool_name: &str) -> Result<ResolvedTool> {
@@ -416,17 +433,7 @@ impl UtcpClientInterface for UtcpClient {
         let resolved = self.resolve_tool(tool_name).await?;
 
         // Validate protocol is allowed by the provider
-        let provider_allowed_protocols = resolved.provider.allowed_protocols();
-        let tool_protocol = resolved.provider.type_().as_key();
-
-        if !provider_allowed_protocols.contains(&tool_protocol.to_string()) {
-            return Err(anyhow!(
-                "Tool '{}' uses communication protocol '{}' which is not allowed by its provider. Allowed protocols: {:?}",
-                tool_name,
-                tool_protocol,
-                provider_allowed_protocols
-            ));
-        }
+        Self::validate_allowed_protocol(&resolved, tool_name)?;
 
         resolved
             .protocol
@@ -450,17 +457,7 @@ impl UtcpClientInterface for UtcpClient {
         let resolved = self.resolve_tool(tool_name).await?;
 
         // Validate protocol is allowed by the provider
-        let provider_allowed_protocols = resolved.provider.allowed_protocols();
-        let tool_protocol = resolved.provider.type_().as_key();
-
-        if !provider_allowed_protocols.contains(&tool_protocol.to_string()) {
-            return Err(anyhow!(
-                "Tool '{}' uses communication protocol '{}' which is not allowed by its provider. Allowed protocols: {:?}",
-                tool_name,
-                tool_protocol,
-                provider_allowed_protocols
-            ));
-        }
+        Self::validate_allowed_protocol(&resolved, tool_name)?;
 
         resolved
             .protocol
