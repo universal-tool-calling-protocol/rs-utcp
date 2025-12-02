@@ -135,6 +135,7 @@ async fn create_bench_client() -> Arc<UtcpClient> {
         name: "bench".to_string(),
         provider_type: ProviderType::HttpStream,
         auth: None,
+        allowed_communication_protocols: vec!["http_stream".to_string()].into(),
     };
 
     client
