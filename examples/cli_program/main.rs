@@ -20,10 +20,12 @@ async fn main() -> anyhow::Result<()> {
     let command_name = format!("{} --cli-mode", self_path.display());
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "cli",
+        "manual_call_templates": [{
+            "call_template_type": "cli",
             "name": "cli_demo",
-            "command_name": command_name
+            "command_name": command_name,
+            "allowed_communication_protocols": ["cli"]
+
         }]
     }))
     .await?;

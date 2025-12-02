@@ -52,11 +52,14 @@ async fn main() -> anyhow::Result<()> {
     println!("Started gRPC demo at {addr}");
 
     let client = common::client_from_providers(serde_json::json!({
-        "providers": [{
-            "provider_type": "grpc",
+        "manual_call_templates": [{
+            "call_template_type": "grpc",
             "name": "grpc_demo",
             "host": "127.0.0.1",
-            "port": addr.port()
+            "port": addr.port(),
+            "allowed_communication_protocols": ["grpc"]
+
+            
         }]
     }))
     .await?;

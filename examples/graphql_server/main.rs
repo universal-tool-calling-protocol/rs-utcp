@@ -14,10 +14,12 @@ async fn main() -> anyhow::Result<()> {
     println!("Started GraphQL demo at http://{addr}/graphql");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "graphql",
+        "manual_call_templates": [{
+            "call_template_type": "graphql",
             "name": "graphql_demo",
-            "url": format!("http://{addr}/graphql")
+            "url": format!("http://{addr}/graphql"),
+            "allowed_communication_protocols": ["graphql"]
+
         }]
     }))
     .await?;

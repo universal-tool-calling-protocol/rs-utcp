@@ -15,10 +15,11 @@ async fn main() -> anyhow::Result<()> {
     println!("Started SSE demo at http://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "sse",
+        "manual_call_templates": [{
+            "call_template_type": "sse",
             "name": "sse_demo",
-            "url": format!("http://{addr}/tools")
+            "url": format!("http://{addr}/tools"),
+            "allowed_communication_protocols": ["sse"]
         }]
     }))
     .await?;

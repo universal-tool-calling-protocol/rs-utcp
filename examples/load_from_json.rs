@@ -9,9 +9,9 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("🚀 Loading UTCP Client from providers.json\n");
+    println!("🚀 Loading UTCP Client from manual with tools (providers.json)\n");
 
-    // Create configuration with providers file (supports both v0.1 and v1.0 formats)
+    // Create configuration with manual file path (v1.0 format with tools)
     let config = UtcpClientConfig::new()
         .with_manual_path(PathBuf::from("examples/providers.json"))
         .with_variable("API_KEY".to_string(), "my-secret-api-key".to_string());

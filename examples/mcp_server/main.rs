@@ -13,10 +13,12 @@ async fn main() -> anyhow::Result<()> {
     println!("Started MCP demo at http://{addr}");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "mcp",
+        "manual_call_templates": [{
+            "call_template_type": "mcp",
             "name": "mcp_demo",
-            "url": format!("http://{addr}")
+            "url": format!("http://{addr}"),
+            "allowed_communication_protocols": ["mcp"]
+
         }]
     }))
     .await?;

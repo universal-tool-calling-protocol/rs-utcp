@@ -15,8 +15,8 @@ async fn main() -> anyhow::Result<()> {
     println!("Started WS demo at ws://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "providers": [{
-            "provider_type": "websocket",
+        "manual_call_templates": [{
+            "call_template_type": "websocket",
             "name": "ws_demo",
             "url": format!("ws://{addr}/tools")
         }]
