@@ -15,12 +15,25 @@ async fn main() -> anyhow::Result<()> {
     let echo_url = format!("http://{addr}/tools");
 
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "http",
-            "name": "http_demo",
-            "url": echo_url,
-            "http_method": "POST",
-            "allowed_communication_protocols": ["http"]
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http"],
+        "info": {
+            "title": "Codemode HTTP Demo",
+            "version": "1.0.0",
+            "description": "Codemode HTTP Demo Manual"
+        },
+        "tools": [{
+            "name": "echo",
+            "description": "Echo a message",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "http",
+                "name": "http_demo",
+                "url": echo_url,
+                "http_method": "POST"
+            }
         }]
     }))
     .await?;

@@ -6,6 +6,10 @@
         "version": "1.0.0",
         "description": "Demonstration of v1.0 manual format with tools"
     },
+    "allowed_communication_protocols": [
+        "http",
+        "cli"
+    ],
     "tools": [
         {
             "name": "get_weather",

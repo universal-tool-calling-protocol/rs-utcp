@@ -16,11 +16,11 @@ async fn main() -> anyhow::Result<()> {
     let addr = spawn_demo_server().await?;
     println!("Started demo HTTP provider at http://{addr}/tools");
 
-    // Load providers via create() factory method using a temp JSON file.
-    // v1.0: uses manual_call_templates instead of providers
+    // Load providers via create() factory method using a temp JSON file (manual v1.0 with tools).
     let client = common::client_from_providers(json!({
         "manual_version": "1.0.0",
         "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["http"],
         "info": {
             "title": "Basic Usage Demo",
             "version": "1.0.0",

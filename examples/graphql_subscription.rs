@@ -21,11 +21,25 @@ async fn main() -> anyhow::Result<()> {
 
     // Create a UTCP client with a GraphQL subscription provider
     let client = common::client_from_providers(json!({
-        "manual_call_templates": [{
-            "call_template_type": "graphql",
-            "name": "stock_sub",
-            "url": format!("http://{}", addr),
-            "operation_type": "subscription"
+        "manual_version": "1.0.0",
+        "utcp_version": "0.3.0",
+        "allowed_communication_protocols": ["graphql"],
+        "info": {
+            "title": "GraphQL Subscription Demo",
+            "version": "1.0.0",
+            "description": "GraphQL Subscription Demo Manual"
+        },
+        "tools": [{
+            "name": "stockPriceUpdates",
+            "description": "Stream stock price updates",
+            "inputs": { "type": "object" },
+            "outputs": { "type": "object" },
+            "tool_call_template": {
+                "call_template_type": "graphql",
+                "name": "stock_sub",
+                "url": format!("http://{}", addr),
+                "operation_type": "subscription"
+            }
         }]
     }))
     .await?;
