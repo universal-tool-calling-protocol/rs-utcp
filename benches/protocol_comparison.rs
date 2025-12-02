@@ -1,32 +1,30 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rs_utcp::{
-    config::UtcpClientConfig,
-    repository::in_memory::InMemoryToolRepository,
-    tag::tag_search::TagSearchStrategy,
-    UtcpClient, UtcpClientInterface,
+    config::UtcpClientConfig, repository::in_memory::InMemoryToolRepository,
+    tag::tag_search::TagSearchStrategy, UtcpClient, UtcpClientInterface,
 };
-use std::{collections::HashMap, sync::Arc};
-use tokio::runtime::Runtime;
 use serde_json::json;
-use tempfile::NamedTempFile;
 use std::fs;
+use std::{collections::HashMap, sync::Arc};
+use tempfile::NamedTempFile;
+use tokio::runtime::Runtime;
 
 /// Helper to create a client from a config JSON
 async fn create_client_from_config(config_json: serde_json::Value) -> Arc<UtcpClient> {
     let temp_file = NamedTempFile::new().unwrap();
     fs::write(temp_file.path(), serde_json::to_vec(&config_json).unwrap()).unwrap();
-    
+
     let config = UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
     let repo = Arc::new(InMemoryToolRepository::new());
     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    
+
     Arc::new(UtcpClient::new(config, repo, search).await.unwrap())
 }
 
 /// Benchmark CLI tool calling (actual execution)
 fn bench_cli_tool_call(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("cli_echo_call", |b| {
         let client = rt.block_on(async {
             let config_json = json!({
@@ -48,15 +46,17 @@ fn bench_cli_tool_call(c: &mut Criterion) {
                     }]
                 }]
             });
-            
+
             create_client_from_config(config_json).await
         });
-        
+
         b.to_async(&rt).iter(|| async {
             let mut args = HashMap::new();
             args.insert("message".to_string(), json!("benchmark"));
-            
-            let _ = client.call_tool(black_box("echo_provider.echo"), black_box(args)).await;
+
+            let _ = client
+                .call_tool(black_box("echo_provider.echo"), black_box(args))
+                .await.expect("call_tool failed");
         });
     });
 }
@@ -65,7 +65,7 @@ fn bench_cli_tool_call(c: &mut Criterion) {
 fn bench_provider_comparison(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("provider_initialization");
-    
+
     // HTTP Provider
     group.bench_function("http", |b| {
         b.to_async(&rt).iter(|| async {
@@ -77,12 +77,12 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "http_method": "GET"
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     // CLI Provider
     group.bench_function("cli", |b| {
         b.to_async(&rt).iter(|| async {
@@ -93,12 +93,12 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "command": "echo"
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     // WebSocket Provider (registration only, no connection)
     group.bench_function("websocket", |b| {
         b.to_async(&rt).iter(|| async {
@@ -109,12 +109,12 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "url": "ws://localhost:9999"
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     // MCP Provider
     group.bench_function("mcp", |b| {
         b.to_async(&rt).iter(|| async {
@@ -126,12 +126,12 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "args": ["server.py"]
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     // gRPC Provider
     group.bench_function("grpc", |b| {
         b.to_async(&rt).iter(|| async {
@@ -142,12 +142,12 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "url": "http://localhost:9999"
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     // SSE Provider
     group.bench_function("sse", |b| {
         b.to_async(&rt).iter(|| async {
@@ -158,19 +158,19 @@ fn bench_provider_comparison(c: &mut Criterion) {
                     "url": "http://localhost:9999/events"
                 }]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark loading multiple providers at once
 fn bench_multi_provider_loading(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("load_6_providers", |b| {
         b.to_async(&rt).iter(|| async {
             let config_json = json!({
@@ -208,7 +208,7 @@ fn bench_multi_provider_loading(c: &mut Criterion) {
                     }
                 ]
             });
-            
+
             let client = create_client_from_config(black_box(config_json)).await;
             black_box(client)
         });

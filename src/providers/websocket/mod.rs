@@ -40,6 +40,7 @@ impl WebSocketProvider {
                 name,
                 provider_type: ProviderType::Websocket,
                 auth,
+                allowed_communication_protocols: None,
             },
             url,
             protocol: None,

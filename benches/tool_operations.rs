@@ -1,15 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rs_utcp::{
-    config::UtcpClientConfig,
-    repository::in_memory::InMemoryToolRepository,
-    tag::tag_search::TagSearchStrategy,
-    UtcpClient, UtcpClientInterface,
+    config::UtcpClientConfig, repository::in_memory::InMemoryToolRepository,
+    tag::tag_search::TagSearchStrategy, UtcpClient, UtcpClientInterface,
 };
-use std::{collections::HashMap, sync::Arc};
 use serde_json::json;
-use tokio::runtime::Runtime;
-use tempfile::NamedTempFile;
 use std::fs;
+use std::{collections::HashMap, sync::Arc};
+use tempfile::NamedTempFile;
+use tokio::runtime::Runtime;
 
 /// Helper function to create a client with tools from config
 async fn create_client_with_tools(tool_count: usize) -> Arc<UtcpClient> {
@@ -27,7 +25,7 @@ async fn create_client_with_tools(tool_count: usize) -> Arc<UtcpClient> {
             ]
         }));
     }
-    
+
     let config_content = json!({
         "manual_call_templates": [{
             "call_template_type": "cli",
@@ -36,14 +34,18 @@ async fn create_client_with_tools(tool_count: usize) -> Arc<UtcpClient> {
             "tools": tools
         }]
     });
-    
+
     let temp_file = NamedTempFile::new().unwrap();
-    fs::write(temp_file.path(), serde_json::to_vec(&config_content).unwrap()).unwrap();
-    
+    fs::write(
+        temp_file.path(),
+        serde_json::to_vec(&config_content).unwrap(),
+    )
+    .unwrap();
+
     let config = UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
     let repo = Arc::new(InMemoryToolRepository::new());
     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-    
+
     Arc::new(UtcpClient::new(config, repo, search).await.unwrap())
 }
 
@@ -65,32 +67,28 @@ fn bench_tool_search(c: &mut Criterion) {
                         .await
                         .unwrap();
                     black_box(results)
-               });
+                });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark client initialization with different configurations
 fn bench_client_initialization(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("client_init_empty", |b| {
         b.to_async(&rt).iter(|| async {
             let config = UtcpClientConfig::new();
             let repo = Arc::new(InMemoryToolRepository::new());
             let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-            
-            let client = UtcpClient::create(
-                black_box(config),
-                black_box(repo),
-                black_box(search),
-            )
-            .await
-            .unwrap();
-            
+
+            let client = UtcpClient::create(black_box(config), black_box(repo), black_box(search))
+                .await
+                .unwrap();
+
             black_box(client)
         });
     });
@@ -121,14 +119,19 @@ fn bench_tool_call_overhead(c: &mut Criterion) {
                             }]
                         }]
                     });
-                    
+
                     let temp_file = NamedTempFile::new().unwrap();
-                    fs::write(temp_file.path(), serde_json::to_vec(&config_content).unwrap()).unwrap();
-                    
-                    let config = UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
+                    fs::write(
+                        temp_file.path(),
+                        serde_json::to_vec(&config_content).unwrap(),
+                    )
+                    .unwrap();
+
+                    let config =
+                        UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
                     let repo = Arc::new(InMemoryToolRepository::new());
                     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-                    
+
                     Arc::new(UtcpClient::new(config, repo, search).await.unwrap())
                 });
 
@@ -140,14 +143,16 @@ fn bench_tool_call_overhead(c: &mut Criterion) {
                             serde_json::json!(format!("value_{}", i)),
                         );
                     }
-                    
+
                     // Call the echo tool
-                    let _ = client.call_tool(black_box("test_provider.echo"), black_box(args)).await;
+                    let _ = client
+                        .call_tool(black_box("test_provider.echo"), black_box(args))
+                        .await;
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
@@ -169,7 +174,7 @@ fn bench_tag_matching(c: &mut Criterion) {
                         for j in 0..count {
                             tags.push(format!("tag_{}_{}", i % 10, j));
                         }
-                        
+
                         tools.push(json!({
                             "name": format!("tool_{}", i),
                             "description": format!("Tool {}", i),
@@ -178,7 +183,7 @@ fn bench_tag_matching(c: &mut Criterion) {
                             "tags": tags
                         }));
                     }
-                    
+
                     let config_content = json!({
                         "manual_call_templates": [{
                             "call_template_type": "cli",
@@ -187,14 +192,19 @@ fn bench_tag_matching(c: &mut Criterion) {
                             "tools": tools
                         }]
                     });
-                    
+
                     let temp_file = NamedTempFile::new().unwrap();
-                    fs::write(temp_file.path(), serde_json::to_vec(&config_content).unwrap()).unwrap();
-                    
-                    let config = UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
+                    fs::write(
+                        temp_file.path(),
+                        serde_json::to_vec(&config_content).unwrap(),
+                    )
+                    .unwrap();
+
+                    let config =
+                        UtcpClientConfig::new().with_providers_file(temp_file.path().to_path_buf());
                     let repo = Arc::new(InMemoryToolRepository::new());
                     let search = Arc::new(TagSearchStrategy::new(repo.clone(), 1.0));
-                    
+
                     Arc::new(UtcpClient::new(config, repo, search).await.unwrap())
                 });
 
@@ -208,7 +218,7 @@ fn bench_tag_matching(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 

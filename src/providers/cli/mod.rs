@@ -38,6 +38,7 @@ impl CliProvider {
                 name,
                 provider_type: ProviderType::Cli,
                 auth,
+                allowed_communication_protocols: None,
             },
             command_name,
             working_dir: None,

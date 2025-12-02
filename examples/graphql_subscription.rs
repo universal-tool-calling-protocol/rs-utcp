@@ -97,7 +97,11 @@ async fn spawn_graphql_subscription_server() -> anyhow::Result<std::net::SocketA
                                                     }
                                                 });
 
-                                                if ws.send(Message::Text(update.to_string())).await.is_err() {
+                                                if ws
+                                                    .send(Message::Text(update.to_string()))
+                                                    .await
+                                                    .is_err()
+                                                {
                                                     return;
                                                 }
 

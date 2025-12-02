@@ -129,6 +129,7 @@ mod tests {
                 name: "udp".to_string(),
                 provider_type: ProviderType::Udp,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             host: addr.ip().to_string(),
             port: addr.port(),
@@ -154,6 +155,7 @@ mod tests {
                 name: "udp".to_string(),
                 provider_type: ProviderType::Udp,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             host: "127.0.0.1".to_string(),
             port: 0,
@@ -182,6 +184,7 @@ mod tests {
                 name: "udp-timeout".to_string(),
                 provider_type: ProviderType::Udp,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             host: "127.0.0.1".to_string(),
             port: 9, // discard port - we won't listen

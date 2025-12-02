@@ -46,7 +46,7 @@ const MAX_MODULES: usize = 16;
 const DANGEROUS_PATTERNS: &[&str] = &[
     "eval(",
     "import ",
-    "fn ",         // Function definitions could be abused
+    "fn ",        // Function definitions could be abused
     "while true", // Infinite loops
     "loop {",     // Infinite loops
 ];
@@ -76,17 +76,12 @@ impl CodeModeUtcp {
         // Check for dangerous patterns
         for pattern in DANGEROUS_PATTERNS {
             if code.contains(pattern) {
-                return Err(anyhow!(
-                    "Code contains prohibited pattern: '{}'",
-                    pattern
-                ));
+                return Err(anyhow!("Code contains prohibited pattern: '{}'", pattern));
             }
         }
 
         Ok(())
     }
-
-
 
     /// Execute a snippet or JSON payload, returning the resulting value and captured output.
     pub async fn execute(&self, args: CodeModeArgs) -> Result<CodeModeResult> {
@@ -187,18 +182,18 @@ impl CodeModeUtcp {
 
     fn build_engine(&self) -> Engine {
         let mut engine = Engine::new();
-        
+
         // Security: Comprehensive sandboxing using centralized constants
-        engine.set_max_expr_depths(MAX_EXPR_DEPTH.0, MAX_EXPR_DEPTH.1); 
-        engine.set_max_operations(MAX_OPERATIONS); 
-        engine.set_max_modules(MAX_MODULES); 
-        engine.set_max_string_size(MAX_STRING_SIZE); 
-        engine.set_max_array_size(MAX_ARRAY_SIZE); 
-        engine.set_max_map_size(MAX_MAP_SIZE); 
-        
+        engine.set_max_expr_depths(MAX_EXPR_DEPTH.0, MAX_EXPR_DEPTH.1);
+        engine.set_max_operations(MAX_OPERATIONS);
+        engine.set_max_modules(MAX_MODULES);
+        engine.set_max_string_size(MAX_STRING_SIZE);
+        engine.set_max_array_size(MAX_ARRAY_SIZE);
+        engine.set_max_map_size(MAX_MAP_SIZE);
+
         // Note: File I/O and other dangerous operations are disabled by default in Rhai
         // when not explicitly importing the std modules
-        
+
         engine.register_fn("sprintf", sprintf);
 
         let client = self.client.clone();
@@ -257,7 +252,7 @@ impl CodeModeUtcp {
                 let mut items = Vec::new();
                 // Security: Limit maximum number of stream items to prevent memory exhaustion
                 const MAX_STREAM_ITEMS: usize = 10_000;
-                
+
                 loop {
                     if items.len() >= MAX_STREAM_ITEMS {
                         return Err(EvalAltResult::ErrorRuntime(
@@ -597,13 +592,13 @@ pub fn sprintf(fmt: &str, args: &[Dynamic]) -> String {
         };
         out = out.replacen("{}", &safe_rendered, 1);
     }
-    
+
     // Security: Limit total output size
     if out.len() > MAX_FMT_SIZE * 2 {
         out.truncate(MAX_FMT_SIZE * 2);
         out.push_str("...[truncated]");
     }
-    
+
     out
 }
 
@@ -789,7 +784,10 @@ mod tests {
 
             let result = codemode.execute(args).await;
             assert!(result.is_err(), "Should reject: {}", code);
-            assert!(result.unwrap_err().to_string().contains("prohibited pattern"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("prohibited pattern"));
         }
     }
 
@@ -888,9 +886,11 @@ mod tests {
     #[test]
     fn security_sprintf_limits_output_size() {
         let fmt = "{}".repeat(10_000);
-        let args: Vec<Dynamic> = (0..10_000).map(|i| Dynamic::from(format!("arg{}", i))).collect();
+        let args: Vec<Dynamic> = (0..10_000)
+            .map(|i| Dynamic::from(format!("arg{}", i)))
+            .collect();
         let result = sprintf(&fmt, &args[..100]); // Use fewer args to stay under MAX_ARGS
-        // Output should be truncated if it gets too large
+                                                  // Output should be truncated if it gets too large
         if result.len() > 20_000 {
             assert!(result.contains("...[truncated]"));
         }

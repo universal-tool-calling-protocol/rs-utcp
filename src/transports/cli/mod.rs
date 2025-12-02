@@ -390,6 +390,7 @@ if (mode === "call") {
                 name: "cli".to_string(),
                 provider_type: ProviderType::Cli,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             command_name: command.to_string(),
             working_dir: None,

@@ -35,6 +35,7 @@ async fn main() -> Result<()> {
         base: BaseProvider {
             name: "example-webrtc-provider".to_string(),
             provider_type: ProviderType::Webrtc,
+            allowed_communication_protocols: Some(vec!["webrtc".to_string()]),
             // Optional: Add authentication for signaling server
             auth: Some(AuthConfig::ApiKey(ApiKeyAuth {
                 auth_type: rs_utcp::auth::AuthType::ApiKey,

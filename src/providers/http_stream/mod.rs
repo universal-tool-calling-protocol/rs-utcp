@@ -38,6 +38,7 @@ impl StreamableHttpProvider {
                 name,
                 provider_type: ProviderType::HttpStream,
                 auth,
+                allowed_communication_protocols: None,
             },
             url,
             http_method: Self::default_method(),

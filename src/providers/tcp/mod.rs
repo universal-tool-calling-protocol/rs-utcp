@@ -36,6 +36,7 @@ impl TcpProvider {
                 name,
                 provider_type: ProviderType::Tcp,
                 auth,
+                allowed_communication_protocols: None,
             },
             host,
             port,

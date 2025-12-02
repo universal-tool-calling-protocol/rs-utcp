@@ -176,6 +176,7 @@ mod tests {
             name: "test".to_string(),
             provider_type: ProviderType::Http,
             auth: None,
+            allowed_communication_protocols: None,
         });
         repo.save_provider_with_tools(provider, tools)
             .await

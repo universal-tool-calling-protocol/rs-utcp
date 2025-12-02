@@ -61,12 +61,10 @@ impl WebRtcTransport {
         let ice_servers: Vec<RTCIceServer> = prov
             .ice_servers
             .iter()
-            .map(|server| {
-                RTCIceServer {
-                    urls: server.urls.clone(),
-                    username: server.username.clone().unwrap_or_default(),
-                    credential: server.credential.clone().unwrap_or_default(),
-                }
+            .map(|server| RTCIceServer {
+                urls: server.urls.clone(),
+                username: server.username.clone().unwrap_or_default(),
+                credential: server.credential.clone().unwrap_or_default(),
             })
             .collect();
 

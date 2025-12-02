@@ -27,6 +27,13 @@ pub struct CallTemplate {
     /// Working directory for the command.
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// List of allowed communication protocol types (e.g., ["http", "cli"]).
+    /// If undefined, null, or empty, defaults to only allowing this template's own call_template_type.
+    /// This provides secure-by-default behavior where a manual can only register/call tools
+    /// that use its own protocol unless explicitly configured otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub allowed_communication_protocols: Option<Vec<String>>,
 }
 
 /// Represents a single command in a multi-step CLI template.
@@ -84,4 +91,10 @@ pub struct ManualV1 {
     pub info: ManualInfo,
     /// List of tools defined in the manual.
     pub tools: Vec<ManualTool>,
+    /// List of allowed communication protocol types for tools in this manual.
+    /// If undefined, null, or empty, defaults to only allowing each tool's own protocol type.
+    /// This provides secure-by-default behavior.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub allowed_communication_protocols: Option<Vec<String>>,
 }

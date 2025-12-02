@@ -107,7 +107,7 @@ impl ClientTransport for HttpClientTransport {
         // Try to parse as UTCP manifest first
         let body_bytes = response.bytes().await?;
         validate_size_limit(&body_bytes, MAX_RESPONSE_SIZE)?;
-        
+
         // Try parsing as JSON
         if let Ok(manifest) = serde_json::from_slice::<Value>(&body_bytes) {
             // Check if it's a UTCP manifest (has "tools" array)
@@ -357,6 +357,7 @@ mod tests {
                 name: "http".to_string(),
                 provider_type: ProviderType::Http,
                 auth: None,
+                allowed_communication_protocols: None,
             },
             http_method: "POST".to_string(),
             url: base_url.clone(),

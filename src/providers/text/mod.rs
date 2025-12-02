@@ -35,6 +35,7 @@ impl TextProvider {
                 name,
                 provider_type: ProviderType::Text,
                 auth,
+                allowed_communication_protocols: None,
             },
             base_path,
         }

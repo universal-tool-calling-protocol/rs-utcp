@@ -40,6 +40,7 @@ impl GraphqlProvider {
                 name,
                 provider_type: ProviderType::Graphql,
                 auth,
+                allowed_communication_protocols: None,
             },
             url,
             operation_type: Self::default_operation(),
