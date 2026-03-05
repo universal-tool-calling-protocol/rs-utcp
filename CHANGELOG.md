@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2]
+
+### Fixed
+- **cargo audit fixes** - Fixed security vulnerabilities found by cargo audit
+
+## [0.3.1]
+
+### Fixed
+- **Manual Loading** - Fixed issue where manuals with multiple tools having the same `call_template_type` and no `name` field would overwrite each other during loading
+  - Tools are now correctly registered with unique identifiers based on `call_template_type` and `name`
+  - Addresses issue #28 where only the last tool in such a list was being registered
+
 ## [0.3.0]
 
 ### Added
