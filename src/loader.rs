@@ -234,6 +234,24 @@ fn parse_manual_tools_with_providers(
                     .to_string()
             };
 
+            // When the tool_call_template has no explicit "name" field, normalize_common_template
+            // defaults the provider name to the call_template_type string (e.g. "cli"). This means
+            // multiple tools of the same type would all get the same provider name and overwrite each
+            // other in the repository (issue #28). Fix: if the provider's current name equals the
+            // bare call_template_type, replace it with the tool's outer name so that every tool gets
+            // its own unique provider slot.
+            let tool_outer_name = tool_val.get("name").and_then(|v| v.as_str());
+            if let Some(outer_name) = tool_outer_name {
+                let current_prov_name = provider_obj
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                // Only override when the name was auto-defaulted to the type string (not explicitly set).
+                if current_prov_name == provider_type_str || current_prov_name.is_empty() {
+                    provider_obj.insert("name".to_string(), Value::String(outer_name.to_string()));
+                }
+            }
+
             // Propagate manual's allowed_communication_protocols to provider if set
             if let Some(ref allowed) = manual_allowed_protocols {
                 if !allowed.is_empty() {
@@ -590,5 +608,87 @@ mod tests {
         assert!(loaded[0].tools.as_ref().unwrap()[0]
             .name
             .starts_with(&loaded[0].provider.name()));
+    }
+
+    /// Regression test for issue #28:
+    /// Multiple tools with the same call_template_type and no explicit name in their
+    /// tool_call_template should each get a unique provider name derived from the tool's
+    /// outer name, preventing them from overwriting each other in the repository.
+    #[tokio::test]
+    async fn load_manual_multiple_tools_same_type_no_template_name_each_get_unique_provider() {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(
+            file,
+            r#"{{
+                "utcp_version": "1.0.1",
+                "manual_version": "1.0.0",
+                "info": {{ "title": "Bug Reproduction", "version": "1.0.0" }},
+                "tools": [
+                    {{
+                        "name": "tool1",
+                        "description": "First CLI tool",
+                        "inputs": {{ "type": "object", "properties": {{}} }},
+                        "outputs": {{ "type": "string" }},
+                        "tool_call_template": {{
+                            "call_template_type": "cli",
+                            "commands": [{{"command": "echo 'tool1'", "append_to_final_output": true}}]
+                        }}
+                    }},
+                    {{
+                        "name": "tool2",
+                        "description": "Second CLI tool",
+                        "inputs": {{ "type": "object", "properties": {{}} }},
+                        "outputs": {{ "type": "string" }},
+                        "tool_call_template": {{
+                            "call_template_type": "cli",
+                            "commands": [{{"command": "echo 'tool2'", "append_to_final_output": true}}]
+                        }}
+                    }},
+                    {{
+                        "name": "tool3",
+                        "description": "Third CLI tool",
+                        "inputs": {{ "type": "object", "properties": {{}} }},
+                        "outputs": {{ "type": "string" }},
+                        "tool_call_template": {{
+                            "call_template_type": "cli",
+                            "commands": [{{"command": "echo 'tool3'", "append_to_final_output": true}}]
+                        }}
+                    }}
+                ]
+            }}"#
+        )
+        .unwrap();
+
+        let config = UtcpClientConfig::default();
+        let loaded = load_providers_with_tools_from_file(file.path(), &config)
+            .await
+            .unwrap();
+
+        // All 3 tools must be present as separate providers
+        assert_eq!(loaded.len(), 3, "Expected 3 providers, one per tool");
+
+        // Each provider must have a distinct name
+        let names: Vec<String> = loaded.iter().map(|p| p.provider.name()).collect();
+        let mut unique_names = names.clone();
+        unique_names.dedup();
+        assert_eq!(
+            unique_names.len(),
+            names.len(),
+            "Provider names are not unique: {:?}",
+            names
+        );
+
+        // Every loaded entry must carry exactly 1 tool
+        for lp in &loaded {
+            let tools = lp.tools.as_ref().unwrap();
+            assert_eq!(tools.len(), 1, "Expected exactly 1 tool per provider");
+            // Tool name must be prefixed with the provider name
+            assert!(
+                tools[0].name.starts_with(&lp.provider.name()),
+                "Tool name '{}' should start with provider name '{}'",
+                tools[0].name,
+                lp.provider.name()
+            );
+        }
     }
 }
